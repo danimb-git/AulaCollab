@@ -1,0 +1,34 @@
+# === Node / dependencies ===
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# === Build outputs ===
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# === Env / secrets ===
+.env
+.env.*
+!.env.example
+
+# === Logs ===
+logs/
+*.log
+
+# === OS / editor ===
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# === Prisma ===
+prisma/dev.db
+prisma/dev.db-journal
+
+# === Uploads / generated files (si no els voleu versionar) ===
+uploads/

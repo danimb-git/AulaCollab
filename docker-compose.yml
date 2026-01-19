@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:15
+    container_name: aulacollab_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aulacollab
+      POSTGRES_USER: aulacollab_admin
+      POSTGRES_PASSWORD: aulacollab_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+volumes:
+  db_data:
