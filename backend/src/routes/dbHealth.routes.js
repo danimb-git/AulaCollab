@@ -11,4 +11,19 @@ router.get("/db-health", async (req, res) => {
   }
 });
 
+router.get("/tables", async (req, res) => {
+  try {
+    const q = `
+      SELECT table_name
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
+      ORDER BY table_name;
+    `;
+    const result = await pool.query(q);
+    res.json({ ok: true, tables: result.rows.map(r => r.table_name) });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 module.exports = router;
