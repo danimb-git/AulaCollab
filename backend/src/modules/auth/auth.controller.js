@@ -23,15 +23,22 @@ Retorna { accessToken }
 */
 const bcrypt = require("bcrypt");
 const { signAccessToken } = require("../../config/jwt");
-const { validateRegisterBody, validateLoginBody } = require("./auth.validation");
+const {
+  validateRegisterBody,
+  validateLoginBody,
+} = require("./auth.validation");
 const authService = require("./auth.service");
 
 // Ajustable: "quants rounds" de bcrypt (10 està bé per projecte)
 const BCRYPT_SALT_ROUNDS = 10;
 
-/**
- * POST /api/auth/register
- */
+/*
+POST /api/auth/register
+
+Registre obert a tothom:
+ - Si isTeacher=false -> rol = ALUMNE
+ - Si isTeacher=true -> cal teacherPin correcte -> rol = PROFESSOR
+*/
 async function register(req, res) {
   // 1) Validació del body
   const v = validateRegisterBody(req.body);
@@ -39,13 +46,37 @@ async function register(req, res) {
     return res.status(400).json({ ok: false, error: v.error });
   }
 
-  const { nom, cognom, email, password, rol } = v.value;
+  const { nom, cognom, email, password, isTeacher, teacherPin } = v.value;
 
   try {
-    // 2) Hash de password
+    // 2) Decidir rol de forma segura (NO ve del client)
+    let rol = "ALUMNE";
+
+    if (isTeacher) {
+      const expectedPin = process.env.TEACHER_SIGNUP_PIN;
+
+      // Si el servidor no està ben configurat, millor retornar 500 clar
+      if (!expectedPin || String(expectedPin).trim() === "") {
+        console.error("Missing TEACHER_SIGNUP_PIN in .env");
+        return res
+          .status(500)
+          .json({ ok: false, error: "Server misconfigured" });
+      }
+
+      if (teacherPin !== expectedPin) {
+        // PIN incorrecte -> no permetem crear professor
+        return res
+          .status(401)
+          .json({ ok: false, error: "Invalid teacher pin" });
+      }
+
+      rol = "PROFESSOR";
+    }
+
+    // 3) Hash de password
     const passwordHash = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
 
-    // 3) Crear usuari via service (DB)
+    // 4) Crear usuari via service (DB)
     // El service ha d'encarregar-se de generar UUID i inserir a la DB.
     const user = await authService.createUser({
       nom,
@@ -55,7 +86,7 @@ async function register(req, res) {
       rol,
     });
 
-    // 4) Resposta OK (MAI retornem passwordHash)
+    // 5) Resposta OK (MAI retornem passwordHash)
     return res.status(201).json({
       ok: true,
       user: {
