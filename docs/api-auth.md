@@ -4,6 +4,17 @@
 
 Crea un usuari nou a la base de dades.
 
+## Idea de rols (molt important)
+
+* El registre està **obert a tothom**.
+* El client **NO pot enviar el rol** directament (per seguretat).
+* Per defecte, qualsevol registre crea un usuari amb rol: **`ALUMNE`**.
+* Si l’usuari marca que vol ser professor (`isTeacher=true`), ha d’introduir un **PIN secret** (`teacherPin`).
+  * Si el PIN és correcte → es crea amb rol **`PROFESSOR`**.
+  * Si el PIN és incorrecte → es retorna error i **no** es crea el compte de professor.
+
+> El PIN es valida al servidor contra la variable d’entorn: `TEACHER_SIGNUP_PIN`
+
 ## Request (què envies)
 
 **URL**
@@ -14,7 +25,7 @@ Crea un usuari nou a la base de dades.
 
 * `Content-Type: application/json`
 
-**Body (JSON)**
+### Body (JSON) - registre alumne
 
 ```json
 {
@@ -22,7 +33,19 @@ Crea un usuari nou a la base de dades.
   "cognom": "Martínez",
   "email": "dalia@example.com",
   "password": "Password123!",
-  "rol": "ALUMNE"
+}
+```
+
+### Body (JSON) - registre professor (checkbox activat)
+
+```json
+{
+  "nom": "Dalia",
+  "cognom": "Martínez",
+  "email": "dalia@example.com",
+  "password": "Password123!",
+  "isTeacher": true,
+  "teacherPin": "123456"
 }
 ```
 
@@ -32,13 +55,8 @@ Crea un usuari nou a la base de dades.
 * `cognom`: obligatori, string, mínim 2 caràcters
 * `email`: obligatori, format email
 * `password`: obligatori, mínim 8 caràcters (o 10 si voleu)
-* `rol`: opcional o obligatori (ara decidim)
-
-  * si el voleu **simple i segur**: el rol **no es pot enviar** i sempre és `ALUMNE`
-  * si el voleu **flexible**: es pot enviar i ha de ser `ALUMNE|PROFESSOR|ADMIN`
-
-👉 **Recomanació per començar:** que `rol` sigui **opcional** i per defecte sigui `ALUMNE`.
-Així no us creeu “admins” per error.
+* `isTeacher`: opcional, boolean (per defecte `false`)
+* `teacherPin`: **obligatori només** si `isTeacher=true`
 
 ## Response èxit (201)
 
@@ -118,7 +136,7 @@ Ha de portar com a mínim:
 * `email`
 * `role`
 
-Això és perquè el middleware `requireAuth` (que ja has fet) pugui omplir `req.user`.
+Això és perquè el middleware `requireAuth` pugui omplir `req.user`.
 
 ## Errors
 
@@ -135,9 +153,3 @@ Això és perquè el middleware `requireAuth` (que ja has fet) pugui omplir `req
 ```json
 { "ok": false, "error": "Invalid credentials" }
 ```
-
----
-
-# Decisió important ara (1 línia)
-
-✅ `rol` al register és **opcional** i si no ve → `ALUMNE`.

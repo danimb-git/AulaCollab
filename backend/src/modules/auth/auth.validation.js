@@ -1,7 +1,5 @@
 // validation: mira si el body està bé abans de fer res.
 
-const ALLOWED_ROLES = ["ALUMNE", "PROFESSOR", "ADMIN"];
-
 function isNonEmptyString(v) {
   return typeof v === "string" && v.trim().length > 0;
 }
@@ -34,13 +32,19 @@ function validateRegisterBody(body) {
     return { ok: false, error: "Invalid password (min 8 characters)" };
   }
 
-  // Rol: recomanació = opcional i per defecte ALUMNE
-  let finalRole = "ALUMNE";
-  if (rol !== undefined) {
-    if (!isNonEmptyString(rol) || !ALLOWED_ROLES.includes(rol.trim())) {
-      return { ok: false, error: `Invalid rol (allowed: ${ALLOWED_ROLES.join(", ")})` };
+  // Checkbox: isTeacher hauria de ser boolean, però si no ve el tractem com false
+  const finalIsTeacher = isTeacher === true;
+
+  // Si vol ser professor, teacherPin és obligatori
+  let finalTeacherPin = null;
+  if (finalIsTeacher) {
+    if (!isNonEmptyString(teacherPin)) {
+      return {
+        ok: false,
+        error: "Missing teacherPin (required when isTeacher=true)",
+      };
     }
-    finalRole = rol.trim();
+    finalTeacherPin = teacherPin.trim();
   }
 
   // Retornem dades "netejes"
@@ -50,8 +54,9 @@ function validateRegisterBody(body) {
       nom: nom.trim(),
       cognom: cognom.trim(),
       email: email.trim().toLowerCase(),
-      password, // la password NO la trimegem (per si volen espais dins)
-      rol: finalRole,
+      password,
+      isTeacher: finalIsTeacher,
+      teacherPin: finalTeacherPin,
     },
   };
 }
@@ -83,5 +88,4 @@ function validateLoginBody(body) {
 module.exports = {
   validateRegisterBody,
   validateLoginBody,
-  ALLOWED_ROLES,
 };
