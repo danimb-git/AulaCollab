@@ -5,11 +5,20 @@
   "type": "commonjs",
   "scripts": {
     "dev": "node src/server.js",
-    "migrate": "node scripts/migrate.js"
-  },
+    "migrate": "node scripts/migrate.js",
+    "studio:azure": "dotenv -e ../.env.azure -- npx prisma studio",
+  "pull:azure": "dotenv -e ../.env.azure -- npx prisma db pull",
+  "generate": "npx prisma generate",
+
+  "studio:local": "dotenv -e .env -- npx prisma studio"
+},
   "dependencies": {
+    "bcrypt": "^6.0.0",
     "dotenv": "^17.2.3",
     "express": "^4.19.2",
-    "pg": "^8.17.1"
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.17.1",
+    "uuid": "^13.0.0",
+    "dotenv-cli": "^11.0.0"
   }
 }

@@ -32,3 +32,5 @@ prisma/dev.db-journal
 
 # === Uploads / generated files (si no els voleu versionar) ===
 uploads/
+
+/generated/prisma
