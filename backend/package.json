@@ -6,19 +6,23 @@
   "scripts": {
     "dev": "node src/server.js",
     "migrate": "node scripts/migrate.js",
-    "studio:azure": "dotenv -e ../.env.azure -- npx prisma studio",
-  "pull:azure": "dotenv -e ../.env.azure -- npx prisma db pull",
-  "generate": "npx prisma generate",
-
-  "studio:local": "dotenv -e .env -- npx prisma studio"
-},
+    "studio:azure": "dotenv -e .env.azure -- npx prisma studio",
+    "studio:local": "dotenv -e .env.local -- npx prisma studio",
+    "pull:azure": "dotenv -e .env.azure -- npx prisma db pull",
+    "generate": "npx prisma generate"
+  },
   "dependencies": {
+    "@prisma/client": "^7.3.0",
     "bcrypt": "^6.0.0",
     "dotenv": "^17.2.3",
+    "dotenv-cli": "^11.0.0",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.17.1",
-    "uuid": "^13.0.0",
-    "dotenv-cli": "^11.0.0"
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "prisma": "^6.19.2",
+    "@types/node": "^25.0.9"
   }
 }

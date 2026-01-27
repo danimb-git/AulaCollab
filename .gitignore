@@ -16,6 +16,8 @@ out/
 .env.*
 !.env.example
 
+
+
 # === Logs ===
 logs/
 *.log
