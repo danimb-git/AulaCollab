@@ -18,7 +18,6 @@ app.use("/api", healthRoutes);
 app.use("/api", dbHealthRoutes);
 app.use("/api", meRoutes);
 app.use("/api/auth", authRoutes);
-app.use("/api", classesRoutes);
-
+app.use("/api/classes", classesRoutes);
 
 module.exports = app;
