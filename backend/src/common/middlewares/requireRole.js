@@ -1,23 +1,25 @@
+const { unauthorized, forbidden } = require("../utils/apiError");
+
 function requireRole(...allowedRoles) {
   return (req, res, next) => {
-    // 1) Assegurem que requireAuth s'ha executat abans
+    // 1) requireAuth ha d’haver posat req.user
     if (!req.user || !req.user.role) {
-      return res.status(401).json({ ok: false, error: "Unauthenticated" });
+      return next(unauthorized("AUTH_REQUIRED", "Unauthenticated"));
     }
 
-    // 2) Comprovem el rol
+    // 2) Comprovar rol
     const userRole = req.user.role;
 
     if (!allowedRoles.includes(userRole)) {
-      return res.status(403).json({
-        ok: false,
-        error: "Forbidden",
-        allowedRoles,
-        yourRole: userRole,
-      });
+      return next(
+        forbidden("ROLE_REQUIRED", "You do not have permission for this action", {
+          allowedRoles,
+          yourRole: userRole,
+        })
+      );
     }
 
-    // 3) Deixar passar
+    // 3) OK
     return next();
   };
 }
