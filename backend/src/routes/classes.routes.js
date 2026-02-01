@@ -1,7 +1,7 @@
 const express = require("express");
 const classesController = require("../modules/classes/classes.controller");
-const requireAuth = require("../middlewares/requireAuth");
-const requireRole = require("../middlewares/requireRole");
+const requireAuth = require("../common/middlewares/requireAuth");
+const requireRole = require("../common/middlewares/requireRole");
 
 const router = express.Router();
 
@@ -11,6 +11,36 @@ router.post(
   requireAuth,
   requireRole("PROFESSOR", "ADMIN"),
   classesController.createClass
+);
+
+// 🔵 REAL: GET /api/classes (BD real, segons usuari)
+router.get(
+  "/",
+  requireAuth,
+  classesController.listClassesForUser
+);
+
+// 🔵 REAL: GET /api/classes/:id (detall + membres)
+router.get(
+  "/:id",
+  requireAuth,
+  classesController.getClassDetail
+);
+
+// 🔵 REAL: POST /api/classes/:id/members (afegir membres per email)
+router.post(
+  "/:id/members",
+  requireAuth,
+  requireRole("PROFESSOR", "ADMIN"),
+  classesController.addMembersByEmail
+);
+
+// 🔵 REAL: DELETE /api/classes/:id/members/:userId
+router.delete(
+  "/:id/members/:userId",
+  requireAuth,
+  requireRole("PROFESSOR", "ADMIN"),
+  classesController.removeMember
 );
 
 // ✅ GET /api/classes  -> llista de classes (dummy)
@@ -67,5 +97,4 @@ router.post("/classes/:id/members", (req, res) => {
     notFound,
   });
 });
-
 module.exports = router;
