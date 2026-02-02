@@ -14,14 +14,14 @@ ALTER TABLE messages
 
 -- 3) Constraint: valors permesos de context_type
 ALTER TABLE messages
-  ADD CONSTRAINT IF NOT EXISTS chk_messages_context_type
+  ADD CONSTRAINT chk_messages_context_type
   CHECK (context_type IN ('dm', 'class', 'group'));
 
 -- 4) Constraint: coherència segons el context
 -- DM: receiver_id obligatori, context_id NULL
 -- CLASS/GROUP: context_id obligatori, receiver_id NULL
 ALTER TABLE messages
-  ADD CONSTRAINT IF NOT EXISTS chk_messages_context_coherence
+  ADD CONSTRAINT chk_messages_context_coherence
   CHECK (
     (context_type = 'dm'    AND receiver_id IS NOT NULL AND context_id IS NULL) OR
     (context_type = 'class' AND receiver_id IS NULL     AND context_id IS NOT NULL) OR
