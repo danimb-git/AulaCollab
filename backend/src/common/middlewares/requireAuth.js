@@ -1,10 +1,5 @@
-/*
-Estem assumint que el token porta: sub, email, role.
-
-Això és el que s'haurà de fer servir quan generi el token al login.
-*/
-
 const { verifyAccessToken } = require("../../config/jwt");
+const { unauthorized } = require("../utils/apiError"); 
 
 function requireAuth(req, res, next) {
   try {
@@ -12,7 +7,7 @@ function requireAuth(req, res, next) {
 
     // 1) Existeix Authorization?
     if (!authHeader) {
-      return res.status(401).json({ ok: false, error: "Missing Authorization header" });
+      return next(unauthorized("AUTH_REQUIRED", "Missing Authorization header"));
     }
 
     // 2) Format "Bearer <token>"?
@@ -21,16 +16,17 @@ function requireAuth(req, res, next) {
     const token = parts[1];
 
     if (scheme !== "Bearer" || !token) {
-      return res.status(401).json({ ok: false, error: "Invalid Authorization format" });
+      return next(unauthorized("AUTH_REQUIRED", "Invalid Authorization format", {
+        expected: "Bearer <token>",
+      }));
     }
 
     // 3) Verificar el token
     const payload = verifyAccessToken(token);
 
     // 4) Guardar l'usuari del token
-    // (IMPORTANT: aquí decidim quin format volem)
     req.user = {
-      id: payload.sub,        // sub = userId
+      id: payload.sub,   // sub = userId
       email: payload.email,
       role: payload.role,
     };
@@ -38,7 +34,7 @@ function requireAuth(req, res, next) {
     // 5) Deixar passar
     return next();
   } catch (err) {
-    return res.status(401).json({ ok: false, error: "Invalid or expired token" });
+    return next(unauthorized("INVALID_TOKEN", "Invalid or expired token"));
   }
 }
 

@@ -19,34 +19,67 @@ async function createClass({ nom, descripcio, professorId }) {
   return newClass;
 }
 
-// ✅ Llista classes on l’usuari és membre
-async function listMyClasses(userId) {
-  const rows = await prisma.class_members.findMany({
-    where: { user_id: userId },
-    include: {
-      classes: true,
-    },
-    orderBy: {
-      joined_at: "desc",
-    },
-  });
+async function listClassesForUser({ user }) {
+  // ADMIN → totes les classes
+  if (user.role === "ADMIN") {
+    return prisma.classes.findMany({
+      orderBy: { created_at: "desc" },
+    });
+  }
 
-  // aplanem
-  return rows.map((r) => r.classes);
+  // PROFESSOR → classes que ha creat
+  if (user.role === "PROFESSOR") {
+    return prisma.classes.findMany({
+      where: { professor_id: user.id },
+      orderBy: { created_at: "desc" },
+    });
+  }
+
+  // ALUMNE → classes on és membre
+  return prisma.classes.findMany({
+    where: {
+      class_members: {
+        some: { user_id: user.id },
+      },
+    },
+    orderBy: { created_at: "desc" },
+  });
+}
+function isAdmin(user) {
+  return user?.role === "ADMIN";
 }
 
-// ✅ Detall classe + membres + rol meu (PROFESSOR si sóc professor_id)
-async function getClassDetail({ classId, userId }) {
-  // comprovar accés (ha de ser membre)
-  const membership = await prisma.class_members.findUnique({
-    where: { class_id_user_id: { class_id: classId, user_id: userId } },
+async function canAccessClass({ classId, user }) {
+  const c = await prisma.classes.findUnique({ where: { id: classId } });
+  if (!c) return { ok: false, status: 404, error: "Class not found" };
+
+  if (isAdmin(user)) return { ok: true, classObj: c };
+
+  // Owner (professor de la classe)
+  if (c.professor_id === user.id) return { ok: true, classObj: c };
+
+  // Member?
+  const member = await prisma.class_members.findUnique({
+    where: { class_id_user_id: { class_id: classId, user_id: user.id } },
   });
 
-  if (!membership) return null;
+  if (!member) return { ok: false, status: 403, error: "Forbidden" };
 
-  const cls = await prisma.classes.findUnique({
+  return { ok: true, classObj: c };
+}
+
+async function getClassDetail({ classId, user }) {
+  const access = await canAccessClass({ classId, user });
+  if (!access.ok) return access;
+
+  const detail = await prisma.classes.findUnique({
     where: { id: classId },
     include: {
+      // Professor owner (relació "users" a Prisma)
+      users: {
+        select: { id: true, nom: true, cognom: true, email: true, rol: true },
+      },
+      // Membres + info usuari
       class_members: {
         include: {
           users: {
@@ -58,80 +91,78 @@ async function getClassDetail({ classId, userId }) {
     },
   });
 
-  if (!cls) return null;
-
-  const roleInClass = cls.professor_id === userId ? "PROFESSOR" : "ALUMNE";
-
-  const members = cls.class_members.map((cm) => ({
-    id: cm.users.id,
-    nom: cm.users.nom,
-    cognom: cm.users.cognom,
-    email: cm.users.email,
-    rol: cm.users.rol,
-    joinedAt: cm.joined_at,
-  }));
-
-  return {
-    id: cls.id,
-    nom: cls.nom,
-    descripcio: cls.descripcio,
-    professorId: cls.professor_id,
-    createdAt: cls.created_at,
-    role: roleInClass,
-    members,
-  };
+  return { ok: true, data: detail };
 }
 
-// ✅ Afegir membres per email (real)
-async function addMembersByEmail({ classId, emails }) {
-  // Normalitzem emails
-  const normalized = [...new Set(emails.map((e) => String(e).trim().toLowerCase()).filter(Boolean))];
+async function addMembersByEmail({ classId, emails, user }) {
+  const c = await prisma.classes.findUnique({ where: { id: classId } });
+  if (!c) return { ok: false, status: 404, error: "Class not found" };
 
-  // 1) busquem quins usuaris existeixen
-  const users = await prisma.users.findMany({
-    where: { email: { in: normalized } },
-    select: { id: true, email: true },
-  });
-
-  const foundEmails = new Set(users.map((u) => u.email));
-  const notFound = normalized.filter((e) => !foundEmails.has(e));
-
-  // 2) mirem quins ja eren membres
-  const memberships = await prisma.class_members.findMany({
-    where: {
-      class_id: classId,
-      user_id: { in: users.map((u) => u.id) },
-    },
-    select: { user_id: true },
-  });
-
-  const alreadyMemberIds = new Set(memberships.map((m) => m.user_id));
-
-  const alreadyMembers = users
-    .filter((u) => alreadyMemberIds.has(u.id))
-    .map((u) => u.email);
-
-  // 3) els que s’han d’afegir
-  const toAdd = users.filter((u) => !alreadyMemberIds.has(u.id));
-
-  if (toAdd.length > 0) {
-    await prisma.class_members.createMany({
-      data: toAdd.map((u) => ({
-        class_id: classId,
-        user_id: u.id,
-      })),
-      skipDuplicates: true,
-    });
+  // només admin o owner
+  if (user.role !== "ADMIN" && c.professor_id !== user.id) {
+    return { ok: false, status: 403, error: "Only owner can add members" };
   }
 
-  const added = toAdd.map((u) => u.email);
+  const cleaned = [...new Set(emails.map(e => String(e || "").trim().toLowerCase()).filter(Boolean))];
 
-  return { classId, added, alreadyMembers, notFound };
+  const added = [];
+  const alreadyMember = [];
+  const notFound = [];
+
+  for (const email of cleaned) {
+    const u = await prisma.users.findUnique({ where: { email } });
+    if (!u) { notFound.push(email); continue; }
+
+    const exists = await prisma.class_members.findUnique({
+      where: { class_id_user_id: { class_id: classId, user_id: u.id } },
+    });
+
+    if (exists) { alreadyMember.push(email); continue; }
+
+    await prisma.class_members.create({
+      data: { class_id: classId, user_id: u.id },
+    });
+
+    added.push(email);
+  }
+
+  return { ok: true, data: { classId, added, alreadyMember, notFound } };
 }
+
+async function removeMember({ classId, memberId, user }) {
+  const c = await prisma.classes.findUnique({ where: { id: classId } });
+  if (!c) return { ok: false, status: 404, error: "Class not found" };
+
+  // només admin o owner
+  if (user.role !== "ADMIN" && c.professor_id !== user.id) {
+    return { ok: false, status: 403, error: "Only owner can remove members" };
+  }
+
+  // no deixar treure l'owner
+  if (memberId === c.professor_id) {
+    return { ok: false, status: 400, error: "Cannot remove class owner" };
+  }
+
+  const exists = await prisma.class_members.findUnique({
+    where: { class_id_user_id: { class_id: classId, user_id: memberId } },
+  });
+
+  if (!exists) return { ok: false, status: 404, error: "Member not found in class" };
+
+  await prisma.class_members.delete({
+    where: { class_id_user_id: { class_id: classId, user_id: memberId } },
+  });
+
+  return { ok: true, data: { classId, removedUserId: memberId } };
+}
+
+
 
 module.exports = {
   createClass,
-  listMyClasses,
+  listClassesForUser,
   getClassDetail,
   addMembersByEmail,
+  removeMember,
 };
+
