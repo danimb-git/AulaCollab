@@ -14,7 +14,7 @@ function validateRegisterBody(body) {
     return { ok: false, error: "Body must be a JSON object" };
   }
 
-  const { nom, cognom, email, password, rol } = body;
+  const { nom, cognom, email, password, isTeacher, teacherPin } = body;
 
   if (!isNonEmptyString(nom) || nom.trim().length < 2) {
     return { ok: false, error: "Invalid nom (min 2 characters)" };
@@ -32,8 +32,9 @@ function validateRegisterBody(body) {
     return { ok: false, error: "Invalid password (min 8 characters)" };
   }
 
-  // Checkbox: isTeacher hauria de ser boolean, però si no ve el tractem com false
-  const finalIsTeacher = isTeacher === true;
+  // isTeacher pot venir com boolean o string ("true"/"false")
+  const finalIsTeacher =
+    isTeacher === true || String(isTeacher).toLowerCase() === "true";
 
   // Si vol ser professor, teacherPin és obligatori
   let finalTeacherPin = null;
@@ -47,7 +48,6 @@ function validateRegisterBody(body) {
     finalTeacherPin = teacherPin.trim();
   }
 
-  // Retornem dades "netejes"
   return {
     ok: true,
     value: {
