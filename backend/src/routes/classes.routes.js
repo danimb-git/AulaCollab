@@ -1,11 +1,11 @@
 const express = require("express");
 const classesController = require("../modules/classes/classes.controller");
-const requireAuth = require("../middlewares/requireAuth");
-const requireRole = require("../middlewares/requireRole");
+const requireAuth = require("../common/middlewares/requireAuth");
+const requireRole = require("../common/middlewares/requireRole");
 
 const router = express.Router();
 
-// POST /api/classes
+// POST /api/classes (crear classe)
 router.post(
   "/",
   requireAuth,
@@ -13,59 +13,26 @@ router.post(
   classesController.createClass
 );
 
-// ✅ GET /api/classes  -> llista de classes (dummy)
-router.get("/classes", (req, res) => {
-  res.json([
-    { id: 1, name: "Biologia" },
-    { id: 2, name: "Programació" },
-  ]);
-});
+// GET /api/classes (llistar classes on sóc membre)
+router.get(
+  "/",
+  requireAuth,
+  classesController.listMyClasses
+);
 
-// ✅ GET /api/classes/:id -> detall + membres (dummy)
-router.get("/classes/:id", (req, res) => {
-  const id = Number(req.params.id);
+// GET /api/classes/:id (detall + membres + rol meu)
+router.get(
+  "/:id",
+  requireAuth,
+  classesController.getClassDetail
+);
 
-  res.json({
-    id,
-    name: id === 1 ? "Biologia" : "Programació",
-    role: "PROFESSOR",
-    members: [
-      { id: 10, email: "profe@demo.com", role: "PROFESSOR" },
-      { id: 11, email: "alumne@demo.com", role: "ALUMNE" },
-    ],
-  });
-});
-
-// ✅ POST /api/classes/:id/members -> afegir membres per email (dummy)
-router.post("/classes/:id/members", (req, res) => {
-  const classId = Number(req.params.id);
-
-  // Esperem { emails: ["a@a.com", "b@b.com"] }
-  const emails = Array.isArray(req.body?.emails) ? req.body.emails : [];
-
-  // DUMMY RULES:
-  // - si conté "old" -> ja era membre
-  // - si conté "no" o "404" -> no trobat
-  // - la resta -> afegit
-  const added = [];
-  const alreadyMembers = [];
-  const notFound = [];
-
-  for (const email of emails) {
-    if (!email || typeof email !== "string") continue;
-
-    const e = email.trim().toLowerCase();
-    if (e.includes("old")) alreadyMembers.push(e);
-    else if (e.includes("no") || e.includes("404")) notFound.push(e);
-    else added.push(e);
-  }
-
-  return res.json({
-    classId,
-    added,
-    alreadyMembers,
-    notFound,
-  });
-});
+// POST /api/classes/:id/members (afegir membres per email)
+router.post(
+  "/:id/members",
+  requireAuth,
+  requireRole("PROFESSOR", "ADMIN"),
+  classesController.addMembersByEmail
+);
 
 module.exports = router;
