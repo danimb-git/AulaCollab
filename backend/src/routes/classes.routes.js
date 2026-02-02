@@ -5,7 +5,7 @@ const requireRole = require("../common/middlewares/requireRole");
 
 const router = express.Router();
 
-// POST /api/classes
+// POST /api/classes (crear classe)
 router.post(
   "/",
   requireAuth,
@@ -84,11 +84,12 @@ router.post("/classes/:id/members", (req, res) => {
   for (const email of emails) {
     if (!email || typeof email !== "string") continue;
 
-    const e = email.trim().toLowerCase();
-    if (e.includes("old")) alreadyMembers.push(e);
-    else if (e.includes("no") || e.includes("404")) notFound.push(e);
-    else added.push(e);
-  }
+// GET /api/classes/:id (detall + membres + rol meu)
+router.get(
+  "/:id",
+  requireAuth,
+  classesController.getClassDetail
+);
 
   return res.json({
     classId,

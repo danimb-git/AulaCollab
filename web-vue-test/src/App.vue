@@ -71,47 +71,9 @@ async function submitAddMembers() {
 </script>
 
 <template>
-  <div style="padding: 24px">
-    <h1>Prova Classes</h1>
-
-    <button @click="loadList">Carregar totes les classes</button>
-
-    <p v-if="loading">Carregant...</p>
-    <p v-if="error" style="color:red">{{ error }}</p>
-
-    <div v-if="list" style="margin-top:16px">
-      <h3>Llista classes</h3>
-      <pre>{{ list }}</pre>
-
-      <h4>Provar detall</h4>
-      <button @click="loadDetail(1)">Detall classe 1</button>
-      <button @click="loadDetail(2)">Detall classe 2</button>
-    </div>
-
-    <div v-if="detail" style="margin-top:16px">
-      <h3>Detall classe</h3>
-      <pre>{{ detail }}</pre>
-
-      <h3>Afegir membres per email</h3>
-      <textarea
-        v-model="emailsText"
-        rows="4"
-        style="width: 420px; max-width: 100%"
-        placeholder="Ex: anna@gmail.com, pau@old.com, notfound404@mail.com"
-      />
-      <br />
-      <button @click="submitAddMembers">Afegir</button>
-
-      <div v-if="addResult" style="margin-top:12px">
-        <b>✅ Afegits</b>
-        <pre>{{ addResult.added }}</pre>
-
-        <b>ℹ️ Ja eren membres</b>
-        <pre>{{ addResult.alreadyMembers }}</pre>
-
-        <b>⚠️ No trobats</b>
-        <pre>{{ addResult.notFound }}</pre>
-      </div>
-    </div>
+  <div style="padding: 20px; font-family: sans-serif">
+    <h2>AulaCollab – Classes</h2>
+    <router-view />
   </div>
 </template>
+

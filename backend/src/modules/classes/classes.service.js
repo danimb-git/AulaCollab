@@ -11,9 +11,7 @@ async function createClass({ nom, descripcio, professorId }) {
       descripcio,
       professor_id: professorId,
       class_members: {
-        create: {
-          user_id: professorId, // el professor també és membre
-        },
+        create: { user_id: professorId },
       },
     },
   });
