@@ -20,7 +20,9 @@ app.use("/api", healthRoutes);
 app.use("/api", dbHealthRoutes);
 app.use("/api", meRoutes);
 app.use("/api/auth", authRoutes);
-app.use(errorHandler);
 app.use("/api/classes", classesRoutes);
+
+// IMPORTANT: error handler must be registered after all routes
+app.use(errorHandler);
 
 module.exports = app;
