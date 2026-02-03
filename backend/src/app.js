@@ -10,9 +10,24 @@ const errorHandler = require("./common/middlewares/errorHandler");
 const classesRoutes = require("./routes/classes.routes");
 const app = express();
 
-app.use(cors({
-  origin: "http://localhost:5173"
-}));
+// CORS: permet el front en desenvolupament (Vite pot canviar el port si 5173 està ocupat)
+const allowedOrigins = new Set([
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:5174",
+]);
+
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      // peticions sense Origin (curl, Postman, etc.)
+      if (!origin) return cb(null, true);
+      if (allowedOrigins.has(origin)) return cb(null, true);
+      return cb(new Error(`CORS blocked for origin: ${origin}`));
+    },
+  })
+);
 
 app.use(express.json());
 
