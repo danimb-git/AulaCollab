@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getClasses } from "../services/classes.service";
+import { getUser } from "../auth/authStore";
 
 export default function ClassesList() {
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const user = getUser();
 
   useEffect(() => {
     let cancelled = false;
@@ -14,7 +17,7 @@ export default function ClassesList() {
       try {
         setLoading(true);
         const data = await getClasses();
-        if (!cancelled) setClasses(data || []);
+        if (!cancelled) setClasses(Array.isArray(data) ? data : []);
       } catch (e) {
         if (!cancelled) setError(e.message || "Error carregant classes");
       } finally {
@@ -33,13 +36,19 @@ export default function ClassesList() {
     <div style={{ padding: 16 }}>
       <h2>Classes</h2>
 
+      {user?.rol === "PROFESSOR" && (
+        <div style={{ marginBottom: 12 }}>
+          <Link to="/classes/new">+ Crear nova classe</Link>
+        </div>
+      )}
+
       {classes.length === 0 ? (
         <p>Encara no formes part de cap classe.</p>
       ) : (
         <ul>
           {classes.map((c) => (
             <li key={c.id}>
-              <Link to={`/classes/${c.id}`}>{c.name || `Classe ${c.id}`}</Link>
+              <Link to={`/classes/${c.id}`}>{c.nom || c.name || `Classe ${c.id}`}</Link>
             </li>
           ))}
         </ul>
