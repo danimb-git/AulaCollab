@@ -5,45 +5,12 @@ const requireRole = require("../common/middlewares/requireRole");
 
 const router = express.Router();
 
-// POST /api/classes (crear classe)
-router.post(
-  "/",
-  requireAuth,
-  requireRole("PROFESSOR", "ADMIN"),
-  classesController.createClass
-);
+/* =========================
+   ✅ DUMMY (per proves)
+   (abans de /:id per no conflictes)
+========================= */
 
-// 🔵 REAL: GET /api/classes (BD real, segons usuari)
-router.get(
-  "/",
-  requireAuth,
-  classesController.listClassesForUser
-);
-
-// 🔵 REAL: GET /api/classes/:id (detall + membres)
-router.get(
-  "/:id",
-  requireAuth,
-  classesController.getClassDetail
-);
-
-// 🔵 REAL: POST /api/classes/:id/members (afegir membres per email)
-router.post(
-  "/:id/members",
-  requireAuth,
-  requireRole("PROFESSOR", "ADMIN"),
-  classesController.addMembersByEmail
-);
-
-// 🔵 REAL: DELETE /api/classes/:id/members/:userId
-router.delete(
-  "/:id/members/:userId",
-  requireAuth,
-  requireRole("PROFESSOR", "ADMIN"),
-  classesController.removeMember
-);
-
-// ✅ GET /api/classes  -> llista de classes (dummy)
+// ✅ GET /api/classes/classes  -> llista de classes (dummy)
 router.get("/classes", (req, res) => {
   res.json([
     { id: 1, name: "Biologia" },
@@ -51,7 +18,7 @@ router.get("/classes", (req, res) => {
   ]);
 });
 
-// ✅ GET /api/classes/:id -> detall + membres (dummy)
+// ✅ GET /api/classes/classes/:id -> detall + membres (dummy)
 router.get("/classes/:id", (req, res) => {
   const id = Number(req.params.id);
 
@@ -66,17 +33,11 @@ router.get("/classes/:id", (req, res) => {
   });
 });
 
-// ✅ POST /api/classes/:id/members -> afegir membres per email (dummy)
+// ✅ POST /api/classes/classes/:id/members -> afegir membres (dummy)
 router.post("/classes/:id/members", (req, res) => {
   const classId = Number(req.params.id);
-
-  // Esperem { emails: ["a@a.com", "b@b.com"] }
   const emails = Array.isArray(req.body?.emails) ? req.body.emails : [];
 
-  // DUMMY RULES:
-  // - si conté "old" -> ja era membre
-  // - si conté "no" o "404" -> no trobat
-  // - la resta -> afegit
   const added = [];
   const alreadyMembers = [];
   const notFound = [];
@@ -84,12 +45,11 @@ router.post("/classes/:id/members", (req, res) => {
   for (const email of emails) {
     if (!email || typeof email !== "string") continue;
 
-// GET /api/classes/:id (detall + membres + rol meu)
-router.get(
-  "/:id",
-  requireAuth,
-  classesController.getClassDetail
-);
+    const e = email.trim().toLowerCase();
+    if (e.includes("old")) alreadyMembers.push(e);
+    else if (e.includes("no") || e.includes("404")) notFound.push(e);
+    else added.push(e);
+  }
 
   return res.json({
     classId,
@@ -98,4 +58,39 @@ router.get(
     notFound,
   });
 });
+
+/* =========================
+   🔵 REAL (BD)
+========================= */
+
+// POST /api/classes
+router.post(
+  "/",
+  requireAuth,
+  requireRole("PROFESSOR", "ADMIN"),
+  classesController.createClass
+);
+
+// GET /api/classes (segons usuari)
+router.get("/", requireAuth, classesController.listClassesForUser);
+
+// GET /api/classes/:id (detall + membres)
+router.get("/:id", requireAuth, classesController.getClassDetail);
+
+// POST /api/classes/:id/members
+router.post(
+  "/:id/members",
+  requireAuth,
+  requireRole("PROFESSOR", "ADMIN"),
+  classesController.addMembersByEmail
+);
+
+// DELETE /api/classes/:id/members/:userId
+router.delete(
+  "/:id/members/:userId",
+  requireAuth,
+  requireRole("PROFESSOR", "ADMIN"),
+  classesController.removeMember
+);
+
 module.exports = router;
