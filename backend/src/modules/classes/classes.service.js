@@ -156,6 +156,30 @@ async function removeMember({ classId, memberId, user }) {
   return { ok: true, data: { classId, removedUserId: memberId } };
 }
 
+async function leaveClass({ classId, user }) {
+  const c = await prisma.classes.findUnique({ where: { id: classId } });
+  if (!c) return { ok: false, status: 404, error: "Class not found" };
+
+  // L'owner (professor) no pot "deixar" la seva pròpia classe.
+  if (c.professor_id === user.id) {
+    return { ok: false, status: 400, error: "Class owner cannot leave the class" };
+  }
+
+  const membership = await prisma.class_members.findUnique({
+    where: { class_id_user_id: { class_id: classId, user_id: user.id } },
+  });
+
+  if (!membership) {
+    return { ok: false, status: 404, error: "You are not a member of this class" };
+  }
+
+  await prisma.class_members.delete({
+    where: { class_id_user_id: { class_id: classId, user_id: user.id } },
+  });
+
+  return { ok: true, data: { classId, leftUserId: user.id } };
+}
+
 
 
 module.exports = {
@@ -164,5 +188,6 @@ module.exports = {
   getClassDetail,
   addMembersByEmail,
   removeMember,
+  leaveClass,
 };
 
