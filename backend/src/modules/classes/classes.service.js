@@ -98,9 +98,9 @@ async function addMembersByEmail({ classId, emails, user }) {
   const c = await prisma.classes.findUnique({ where: { id: classId } });
   if (!c) return { ok: false, status: 404, error: "Class not found" };
 
-  // només admin o owner
-  if (user.role !== "ADMIN" && c.professor_id !== user.id) {
-    return { ok: false, status: 403, error: "Only owner can add members" };
+  // només owner (professor de la classe)
+  if (c.professor_id !== user.id) {
+    return { ok: false, status: 403, error: "Only class owner can add members" };
   }
 
   const cleaned = [...new Set(emails.map(e => String(e || "").trim().toLowerCase()).filter(Boolean))];
@@ -133,9 +133,9 @@ async function removeMember({ classId, memberId, user }) {
   const c = await prisma.classes.findUnique({ where: { id: classId } });
   if (!c) return { ok: false, status: 404, error: "Class not found" };
 
-  // només admin o owner
-  if (user.role !== "ADMIN" && c.professor_id !== user.id) {
-    return { ok: false, status: 403, error: "Only owner can remove members" };
+  // només owner (professor de la classe)
+  if (c.professor_id !== user.id) {
+    return { ok: false, status: 403, error: "Only class owner can remove members" };
   }
 
   // no deixar treure l'owner
@@ -156,6 +156,28 @@ async function removeMember({ classId, memberId, user }) {
   return { ok: true, data: { classId, removedUserId: memberId } };
 }
 
+async function leaveClass({ classId, user }) {
+  const c = await prisma.classes.findUnique({ where: { id: classId } });
+  if (!c) return { ok: false, status: 404, error: "Class not found" };
+
+  // l'owner no pot abandonar (no hi ha transferència d'owner en aquest mòdul)
+  if (c.professor_id === user.id) {
+    return { ok: false, status: 400, error: "Class owner cannot leave the class" };
+  }
+
+  const exists = await prisma.class_members.findUnique({
+    where: { class_id_user_id: { class_id: classId, user_id: user.id } },
+  });
+
+  if (!exists) return { ok: false, status: 404, error: "You are not a member of this class" };
+
+  await prisma.class_members.delete({
+    where: { class_id_user_id: { class_id: classId, user_id: user.id } },
+  });
+
+  return { ok: true, data: { classId, leftUserId: user.id } };
+}
+
 
 
 module.exports = {
@@ -164,5 +186,6 @@ module.exports = {
   getClassDetail,
   addMembersByEmail,
   removeMember,
+  leaveClass,
 };
 
