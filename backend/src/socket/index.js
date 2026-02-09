@@ -47,6 +47,33 @@ function parseRoom(room) {
   return null;
 }
 
+function validateText(text) {
+  if (typeof text !== "string") return "text must be a string";
+  const trimmed = text.trim();
+  if (!trimmed) return "text cannot be empty";
+  if (trimmed.length > 1000) return "text too long (max 1000)";
+  return null;
+}
+
+function dmRoom(userA, userB) {
+  const [a, b] = [userA, userB].sort(); // ordena strings
+  return `dm:${a}:${b}`;
+}
+
+function roomFromContext({ contextType, contextId, senderId, receiverId }) {
+  if (contextType === "class") return `class:${contextId}`;
+  if (contextType === "group") return `group:${contextId}`;
+  if (contextType === "dm") return dmRoom(senderId, receiverId);
+  return null;
+}
+
+async function userExists(userId) {
+  const r = await pool.query(`SELECT 1 FROM users WHERE id = $1 LIMIT 1`, [
+    userId,
+  ]);
+  return r.rowCount > 0;
+}
+
 function initSocket(httpServer) {
   const io = new Server(httpServer, {
     cors: {
@@ -60,6 +87,9 @@ function initSocket(httpServer) {
     try {
       // 1) Intentem agafar token de handshake.auth (RECOMANAT)
       let token = socket.handshake.auth?.token;
+      console.log("🟡 TOKEN:", token);
+      console.log("🟡 handshake.auth:", socket.handshake.auth);
+      console.log("🟡 token present?", !!token);
 
       // 2) Si no hi és, provem headers (Authorization: Bearer ...)
       if (!token) {
@@ -76,17 +106,27 @@ function initSocket(httpServer) {
 
       // 4) Verificar JWT
       const payload = jwt.verify(token, process.env.JWT_SECRET);
+      console.log("🟢 JWT PAYLOAD REAL:", payload);
 
-      // 5) Guardar usuari al socket (aquí és on després el farem servir)
+      // 5) Guardar usuari al socket
+      const userId = payload.sub || payload.id || payload.userId;
+
+      if (!userId) {
+        return next(new Error("Invalid token payload (missing user id)"));
+      }
+
       socket.user = {
-        id: payload.id,
+        id: userId,
         email: payload.email,
         role: payload.role,
       };
 
+      console.log("🟢 socket.user:", socket.user);
+
       // 6) OK → acceptar connexió
       return next();
     } catch (err) {
+      console.log("🔴 auth error:", err.message);
       return next(new Error("Invalid token"));
     }
   });
@@ -141,6 +181,99 @@ function initSocket(httpServer) {
       try {
         socket.leave(room);
         return ack?.({ ok: true, room });
+      } catch (err) {
+        return ack?.({ ok: false, error: err.message });
+      }
+    });
+
+    socket.on("send_message", async (payload, ack) => {
+      try {
+        const senderId = socket.user.id;
+
+        // 1) Llegir camps
+        const { contextType, contextId, receiverId, text } = payload || {};
+
+        // 2) Validacions bàsiques
+        if (!contextType || !["dm", "class", "group"].includes(contextType)) {
+          return ack?.({
+            ok: false,
+            error: "contextType must be dm, class, or group",
+          });
+        }
+
+        const textErr = validateText(text);
+        if (textErr) return ack?.({ ok: false, error: textErr });
+
+        if (contextType === "dm") {
+          if (!receiverId)
+            return ack?.({ ok: false, error: "receiverId is required for dm" });
+          // opcional: validar UUID si teniu funció isUuid
+          const exists = await userExists(receiverId);
+          if (!exists)
+            return ack?.({ ok: false, error: "receiverId not found" });
+          if (receiverId === senderId)
+            return ack?.({ ok: false, error: "cannot DM yourself" });
+        } else {
+          if (!contextId)
+            return ack?.({
+              ok: false,
+              error: "contextId is required for class/group",
+            });
+        }
+
+        // 3) Validació de permisos
+        if (contextType === "class") {
+          const ok = await canJoinClass(senderId, contextId);
+          if (!ok) return ack?.({ ok: false, error: "Forbidden (class)" });
+        }
+
+        if (contextType === "group") {
+          const ok = await canJoinGroup(senderId, contextId);
+          if (!ok) return ack?.({ ok: false, error: "Forbidden (group)" });
+        }
+
+        // DM: permís implícit si receiver existeix
+
+        // 4) Persistència a BD (INSERT)
+        const insert = await pool.query(
+          `
+      INSERT INTO messages (text, sender_id, receiver_id, context_type, context_id)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING 
+        id, text,
+        sender_id AS "senderId",
+        receiver_id AS "receiverId",
+        context_type AS "contextType",
+        context_id AS "contextId",
+        created_at AS "createdAt"
+      `,
+          [
+            text.trim(),
+            senderId,
+            contextType === "dm" ? receiverId : null,
+            contextType,
+            contextType === "dm" ? null : contextId,
+          ],
+        );
+
+        const messageSaved = insert.rows[0];
+
+        // 5) Room correcta
+        const room = roomFromContext({
+          contextType,
+          contextId,
+          senderId,
+          receiverId,
+        });
+
+        if (!room) return ack?.({ ok: false, error: "Could not build room" });
+
+        // 6) Emitim a la room
+        // IMPORTANT: els clients han d'haver fet join_room abans si volen rebre-ho
+        io.to(room).emit("new_message", messageSaved);
+
+        // 7) ACK al sender
+        return ack?.({ ok: true, message: messageSaved, room });
       } catch (err) {
         return ack?.({ ok: false, error: err.message });
       }
