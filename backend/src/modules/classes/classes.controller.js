@@ -27,6 +27,75 @@ async function createClass(req, res) {
   }
 }
 
+// PATCH /api/classes/:id
+// Body d'exemple (Postman):
+// { "nom": "Nou nom", "descripcio": "Nova descripció" }
+async function updateClass(req, res) {
+  try {
+    const classId = req.params.id;
+    const { nom, descripcio } = req.body;
+
+    if (nom !== undefined) {
+      if (typeof nom !== "string" || nom.trim().length === 0) {
+        return res
+          .status(400)
+          .json({ ok: false, error: "Field 'nom' must be a non-empty string" });
+      }
+      if (nom.trim().length > 120) {
+        return res.status(400).json({
+          ok: false,
+          error: "Field 'nom' is too long (max 120)",
+        });
+      }
+    }
+
+    const result = await classesService.updateClass({
+      classId,
+      user: req.user,
+      nom: nom !== undefined ? nom.trim() : undefined,
+      descripcio,
+    });
+
+    if (!result.ok) {
+      return res
+        .status(result.status)
+        .json({ ok: false, error: result.error });
+    }
+
+    return res.json({ ok: true, data: result.data });
+  } catch (e) {
+    console.error(e);
+    return res
+      .status(500)
+      .json({ ok: false, error: "Internal server error" });
+  }
+}
+
+// DELETE /api/classes/:id
+async function deleteClass(req, res) {
+  try {
+    const classId = req.params.id;
+
+    const result = await classesService.deleteClass({
+      classId,
+      user: req.user,
+    });
+
+    if (!result.ok) {
+      return res
+        .status(result.status)
+        .json({ ok: false, error: result.error });
+    }
+
+    return res.json({ ok: true, data: result.data });
+  } catch (e) {
+    console.error(e);
+    return res
+      .status(500)
+      .json({ ok: false, error: "Internal server error" });
+  }
+}
+
 async function listClassesForUser(req, res) {
   try {
     const classes = await classesService.listClassesForUser({
@@ -143,6 +212,44 @@ async function removeMember(req, res) {
   }
 }
 
+// PATCH /api/classes/:id/members/:userId
+// Body d'exemple:
+// { "roleInClass": "ASSISTANT" }
+async function updateMember(req, res) {
+  try {
+    const classId = req.params.id;
+    const memberId = req.params.userId;
+    const { roleInClass } = req.body || {};
+
+    if (typeof roleInClass !== "string" || roleInClass.trim().length === 0) {
+      return res.status(400).json({
+        ok: false,
+        error: "Field 'roleInClass' must be a non-empty string",
+      });
+    }
+
+    const result = await classesService.updateMember({
+      classId,
+      memberId,
+      user: req.user,
+      roleInClass: roleInClass.trim(),
+    });
+
+    if (!result.ok) {
+      return res
+        .status(result.status)
+        .json({ ok: false, error: result.error });
+    }
+
+    return res.json({ ok: true, data: result.data });
+  } catch (e) {
+    console.error(e);
+    return res
+      .status(500)
+      .json({ ok: false, error: "Internal server error" });
+  }
+}
+
 
 
 module.exports = {
@@ -152,5 +259,8 @@ module.exports = {
   addMembersByEmail,
   removeMember,
   leaveClass,
+  updateClass,
+  deleteClass,
+  updateMember,
 };
 
