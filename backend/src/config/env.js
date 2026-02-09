@@ -33,6 +33,13 @@ const env = {
   // JWT
   JWT_SECRET: requireEnv("JWT_SECRET"),
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || "1h",
+
+  // Uploads
+  FILE_UPLOAD_MAX_MB: process.env.FILE_UPLOAD_MAX_MB
+    ? Number(process.env.FILE_UPLOAD_MAX_MB)
+    : 10,
 };
+
+env.FILE_UPLOAD_MAX_BYTES = env.FILE_UPLOAD_MAX_MB * 1024 * 1024;
 
 module.exports = env;

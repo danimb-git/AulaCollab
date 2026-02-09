@@ -1,47 +1,33 @@
 const express = require("express");
-const groupsController = require("../modules/groups/groups.controller");
 const requireAuth = require("../common/middlewares/requireAuth");
-const requireRole = require("../common/middlewares/requireRole");
+const { createUpload } = require("../common/middlewares/upload");
+const documentsController = require("../modules/documents/documents.controller");
 
 const router = express.Router();
 
-// POST /api/groups
-// Rols permesos: ALUMNE, PROFESSOR, ADMIN
+// Documents (groups)
+const groupUpload = createUpload("groups");
+
+// POST /api/groups/:id/documents (admin o membre del grup)
 router.post(
-  "/",
+  "/:id/documents",
   requireAuth,
-  requireRole("ALUMNE", "PROFESSOR", "ADMIN"),
-  groupsController.createGroup
+  groupUpload.single("file"),
+  documentsController.uploadForGroup
 );
 
-// GET /api/groups
-router.get("/", requireAuth, groupsController.listGroupsForUser);
-
-// GET /api/groups/:id (detall + membres)
-router.get("/:id", requireAuth, groupsController.getGroupDetail);
-
-// PATCH /api/groups/:id (nom/descripcio) - només owner o ADMIN (es comprova al servei)
-router.patch("/:id", requireAuth, groupsController.updateGroup);
-
-// DELETE /api/groups/:id - només owner o ADMIN (es comprova al servei)
-router.delete("/:id", requireAuth, groupsController.deleteGroup);
-
-// POST /api/groups/:id/members
-router.post("/:id/members", requireAuth, groupsController.addMember);
-
-// DELETE /api/groups/:id/members/:userId
-router.delete(
-  "/:id/members/:userId",
+// GET /api/groups/:id/documents
+router.get(
+  "/:id/documents",
   requireAuth,
-  groupsController.removeMember
+  documentsController.listGroupDocuments
 );
 
-// PATCH /api/groups/:id/members/:userId
-router.patch(
-  "/:id/members/:userId",
+// GET /api/groups/:id/documents/:docId/download
+router.get(
+  "/:id/documents/:docId/download",
   requireAuth,
-  groupsController.updateMember
+  documentsController.downloadGroupDocument
 );
 
 module.exports = router;
-

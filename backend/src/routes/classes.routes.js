@@ -1,11 +1,13 @@
 const express = require("express");
 const classesController = require("../modules/classes/classes.controller");
+const documentsController = require("../modules/documents/documents.controller");
 const requireAuth = require("../common/middlewares/requireAuth");
 const requireRole = require("../common/middlewares/requireRole");
+const { createUpload } = require("../common/middlewares/upload");
 
 const router = express.Router();
 
-// POST /api/classes (crear classe) - PROFESSOR o ADMIN
+// POST /api/classes
 router.post(
   "/",
   requireAuth,
@@ -13,37 +15,13 @@ router.post(
   classesController.createClass
 );
 
-// 🔵 REAL: GET /api/classes (BD real, segons usuari)
-router.get(
-  "/",
-  requireAuth,
-  classesController.listClassesForUser
-);
+// GET /api/classes (segons usuari)
+router.get("/", requireAuth, classesController.listClassesForUser);
 
-// 🔵 REAL: GET /api/classes/:id (detall + membres)
-router.get(
-  "/:id",
-  requireAuth,
-  classesController.getClassDetail
-);
+// GET /api/classes/:id (detall + membres)
+router.get("/:id", requireAuth, classesController.getClassDetail);
 
-// PATCH /api/classes/:id (actualitzar nom/descripcio) - owner (professor) o ADMIN
-router.patch(
-  "/:id",
-  requireAuth,
-  requireRole("PROFESSOR", "ADMIN"),
-  classesController.updateClass
-);
-
-// DELETE /api/classes/:id - owner (professor) o ADMIN
-router.delete(
-  "/:id",
-  requireAuth,
-  requireRole("PROFESSOR", "ADMIN"),
-  classesController.deleteClass
-);
-
-// 🔵 REAL: POST /api/classes/:id/members (afegir membres per email)
+// POST /api/classes/:id/members
 router.post(
   "/:id/members",
   requireAuth,
@@ -51,7 +29,7 @@ router.post(
   classesController.addMembersByEmail
 );
 
-// 🔵 REAL: DELETE /api/classes/:id/members/:userId
+// DELETE /api/classes/:id/members/:userId
 router.delete(
   "/:id/members/:userId",
   requireAuth,
@@ -59,15 +37,29 @@ router.delete(
   classesController.removeMember
 );
 
-// 🔵 REAL: PATCH /api/classes/:id/members/:userId (actualitzar roleInClass)
-router.patch(
-  "/:id/members/:userId",
+// Documents (classes)
+const classUpload = createUpload("classes");
+
+// POST /api/classes/:id/documents (només admin o professor propietari)
+router.post(
+  "/:id/documents",
   requireAuth,
-  requireRole("PROFESSOR", "ADMIN"),
-  classesController.updateMember
+  classUpload.single("file"),
+  documentsController.uploadForClass
 );
 
-// POST /api/classes/:id/leave (ALUMNE abandona la classe; també permet a qualsevol membre no-owner marxar)
-router.post("/:id/leave", requireAuth, classesController.leaveClass);
+// GET /api/classes/:id/documents (admin, professor propietari o alumne membre)
+router.get(
+  "/:id/documents",
+  requireAuth,
+  documentsController.listClassDocuments
+);
+
+// GET /api/classes/:id/documents/:docId/download
+router.get(
+  "/:id/documents/:docId/download",
+  requireAuth,
+  documentsController.downloadClassDocument
+);
 
 module.exports = router;
