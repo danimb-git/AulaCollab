@@ -8,6 +8,7 @@ const authRoutes = require("./modules/auth/auth.routes");
 const errorHandler = require("./common/middlewares/errorHandler");
 
 const classesRoutes = require("./routes/classes.routes");
+const groupsRoutes = require("./routes/groups.routes");
 const app = express();
 
 // CORS: permet el front en desenvolupament (Vite pot canviar el port si 5173 està ocupat)
@@ -36,6 +37,7 @@ app.use("/api", dbHealthRoutes);
 app.use("/api", meRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/classes", classesRoutes);
+app.use("/api/groups", groupsRoutes);
 
 // IMPORTANT: error handler must be registered after all routes
 app.use(errorHandler);
