@@ -8,6 +8,7 @@ const authRoutes = require("./modules/auth/auth.routes");
 const errorHandler = require("./common/middlewares/errorHandler");
 
 const classesRoutes = require("./routes/classes.routes");
+const groupsRoutes = require("./routes/groups.routes");
 const app = express();
 
 app.use(cors({
@@ -22,6 +23,7 @@ app.use("/api", meRoutes);
 app.use("/api/auth", authRoutes);
 
 app.use("/api/classes", classesRoutes);
+app.use("/api/groups", groupsRoutes);
 
 app.use(errorHandler);
 
