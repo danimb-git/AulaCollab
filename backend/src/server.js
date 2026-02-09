@@ -3,6 +3,11 @@ const http = require("http");
 
 const env = require("./config/env");
 const app = require("./app");
+const http = require("http");
+const { initSocket } = require("./socket");
+
+const httpServer = http.createServer(app);
+const io = initSocket(httpServer);
 const initRealtime = require("./realtime"); 
 
 // creem el servidor HTTP amb Express

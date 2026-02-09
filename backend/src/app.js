@@ -8,6 +8,9 @@ const authRoutes = require("./modules/auth/auth.routes");
 const errorHandler = require("./common/middlewares/errorHandler");
 
 const classesRoutes = require("./routes/classes.routes");
+
+const messagesRoutes = require("./routes/messages.routes");
+
 const groupsRoutes = require("./routes/groups.routes");
 const app = express();
 
@@ -37,6 +40,7 @@ app.use("/api", dbHealthRoutes);
 app.use("/api", meRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/classes", classesRoutes);
+app.use("/api", messagesRoutes);
 app.use("/api/groups", groupsRoutes);
 
 // IMPORTANT: error handler must be registered after all routes

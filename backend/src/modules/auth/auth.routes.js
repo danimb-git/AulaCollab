@@ -1,3 +1,4 @@
+// aulacollab/backend/src/modules/auth/auth.routes.js
 // routes: “quina URL existeix” (ex: /register) i a quin controlador va.
 
 const express = require("express");
