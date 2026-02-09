@@ -11,6 +11,7 @@ model class_members {
   class_id  String   @db.Uuid
   user_id   String   @db.Uuid
   joined_at DateTime @default(now()) @db.Timestamptz(6)
+  role_in_class String? @db.VarChar(50)
 
   classes classes @relation(fields: [class_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   users   users   @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
@@ -56,6 +57,7 @@ model group_members {
   group_id  String   @db.Uuid
   user_id   String   @db.Uuid
   joined_at DateTime @default(now()) @db.Timestamptz(6)
+  member_role String? @db.VarChar(50)
 
   work_groups work_groups @relation(fields: [group_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   users       users       @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
@@ -99,6 +101,7 @@ model users {
   classes       classes[]
   documents     documents[]
   group_members group_members[]
+  owned_work_groups work_groups[]
 
   messages_messages_receiver_idTousers messages[] @relation("messages_receiver_idTousers")
   messages_messages_sender_idTousers   messages[] @relation("messages_sender_idTousers")
@@ -113,6 +116,14 @@ model work_groups {
 
   documents     documents[]
   group_members group_members[]
+  descripcio   String?
+  owner_id     String?  @db.Uuid
+  class_id     String?  @db.Uuid
+  owner        users?   @relation(fields: [owner_id], references: [id], onUpdate: NoAction)
+  classes      classes? @relation(fields: [class_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([owner_id], map: "idx_work_groups_owner")
+  @@index([class_id], map: "idx_work_groups_class")
 }
 
 enum user_role {
