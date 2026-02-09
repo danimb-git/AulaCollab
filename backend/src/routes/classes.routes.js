@@ -5,11 +5,11 @@ const requireRole = require("../common/middlewares/requireRole");
 
 const router = express.Router();
 
-// POST /api/classes (crear classe) - només PROFESSOR (teacher)
+// POST /api/classes (crear classe) - PROFESSOR o ADMIN
 router.post(
   "/",
   requireAuth,
-  requireRole("PROFESSOR"),
+  requireRole("PROFESSOR", "ADMIN"),
   classesController.createClass
 );
 
@@ -27,11 +27,27 @@ router.get(
   classesController.getClassDetail
 );
 
+// PATCH /api/classes/:id (actualitzar nom/descripcio) - owner (professor) o ADMIN
+router.patch(
+  "/:id",
+  requireAuth,
+  requireRole("PROFESSOR", "ADMIN"),
+  classesController.updateClass
+);
+
+// DELETE /api/classes/:id - owner (professor) o ADMIN
+router.delete(
+  "/:id",
+  requireAuth,
+  requireRole("PROFESSOR", "ADMIN"),
+  classesController.deleteClass
+);
+
 // 🔵 REAL: POST /api/classes/:id/members (afegir membres per email)
 router.post(
   "/:id/members",
   requireAuth,
-  requireRole("PROFESSOR"),
+  requireRole("PROFESSOR", "ADMIN"),
   classesController.addMembersByEmail
 );
 
@@ -39,8 +55,16 @@ router.post(
 router.delete(
   "/:id/members/:userId",
   requireAuth,
-  requireRole("PROFESSOR"),
+  requireRole("PROFESSOR", "ADMIN"),
   classesController.removeMember
+);
+
+// 🔵 REAL: PATCH /api/classes/:id/members/:userId (actualitzar roleInClass)
+router.patch(
+  "/:id/members/:userId",
+  requireAuth,
+  requireRole("PROFESSOR", "ADMIN"),
+  classesController.updateMember
 );
 
 // POST /api/classes/:id/leave (ALUMNE abandona la classe; també permet a qualsevol membre no-owner marxar)

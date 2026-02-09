@@ -27,10 +27,19 @@ async function listClassesForUser({ user }) {
     });
   }
 
-  // PROFESSOR → classes que ha creat
+  // PROFESSOR → classes que ha creat o on és membre
   if (user.role === "PROFESSOR") {
     return prisma.classes.findMany({
-      where: { professor_id: user.id },
+      where: {
+        OR: [
+          { professor_id: user.id },
+          {
+            class_members: {
+              some: { user_id: user.id },
+            },
+          },
+        ],
+      },
       orderBy: { created_at: "desc" },
     });
   }
@@ -45,8 +54,13 @@ async function listClassesForUser({ user }) {
     orderBy: { created_at: "desc" },
   });
 }
+
 function isAdmin(user) {
   return user?.role === "ADMIN";
+}
+
+function isOwnerOfClass(classObj, user) {
+  return classObj.professor_id === user.id;
 }
 
 async function canAccessClass({ classId, user }) {
@@ -56,7 +70,7 @@ async function canAccessClass({ classId, user }) {
   if (isAdmin(user)) return { ok: true, classObj: c };
 
   // Owner (professor de la classe)
-  if (c.professor_id === user.id) return { ok: true, classObj: c };
+  if (isOwnerOfClass(c, user)) return { ok: true, classObj: c };
 
   // Member?
   const member = await prisma.class_members.findUnique({
@@ -66,6 +80,21 @@ async function canAccessClass({ classId, user }) {
   if (!member) return { ok: false, status: 403, error: "Forbidden" };
 
   return { ok: true, classObj: c };
+}
+
+async function canManageClass({ classId, user }) {
+  const c = await prisma.classes.findUnique({ where: { id: classId } });
+  if (!c) return { ok: false, status: 404, error: "Class not found" };
+
+  if (isAdmin(user) || isOwnerOfClass(c, user)) {
+    return { ok: true, classObj: c };
+  }
+
+  return {
+    ok: false,
+    status: 403,
+    error: "Only class owner or admin can manage this class",
+  };
 }
 
 async function getClassDetail({ classId, user }) {
@@ -95,13 +124,9 @@ async function getClassDetail({ classId, user }) {
 }
 
 async function addMembersByEmail({ classId, emails, user }) {
-  const c = await prisma.classes.findUnique({ where: { id: classId } });
-  if (!c) return { ok: false, status: 404, error: "Class not found" };
-
-  // només owner (professor de la classe)
-  if (c.professor_id !== user.id) {
-    return { ok: false, status: 403, error: "Only class owner can add members" };
-  }
+  const manage = await canManageClass({ classId, user });
+  if (!manage.ok) return manage;
+  const c = manage.classObj;
 
   const cleaned = [...new Set(emails.map(e => String(e || "").trim().toLowerCase()).filter(Boolean))];
 
@@ -130,13 +155,9 @@ async function addMembersByEmail({ classId, emails, user }) {
 }
 
 async function removeMember({ classId, memberId, user }) {
-  const c = await prisma.classes.findUnique({ where: { id: classId } });
-  if (!c) return { ok: false, status: 404, error: "Class not found" };
-
-  // només owner (professor de la classe)
-  if (c.professor_id !== user.id) {
-    return { ok: false, status: 403, error: "Only class owner can remove members" };
-  }
+  const manage = await canManageClass({ classId, user });
+  if (!manage.ok) return manage;
+  const c = manage.classObj;
 
   // no deixar treure l'owner
   if (memberId === c.professor_id) {
@@ -178,7 +199,68 @@ async function leaveClass({ classId, user }) {
   return { ok: true, data: { classId, leftUserId: user.id } };
 }
 
+async function updateClass({ classId, user, nom, descripcio }) {
+  const manage = await canManageClass({ classId, user });
+  if (!manage.ok) return manage;
 
+  const dataToUpdate = {};
+  if (typeof nom === "string") {
+    dataToUpdate.nom = nom;
+  }
+  if (descripcio !== undefined) {
+    dataToUpdate.descripcio =
+      typeof descripcio === "string" ? descripcio : null;
+  }
+
+  const updated = await prisma.classes.update({
+    where: { id: classId },
+    data: dataToUpdate,
+  });
+
+  return { ok: true, data: updated };
+}
+
+async function deleteClass({ classId, user }) {
+  const manage = await canManageClass({ classId, user });
+  if (!manage.ok) return manage;
+
+  // ON DELETE CASCADE a class_members ja s'encarrega de netejar membres
+  await prisma.classes.delete({
+    where: { id: classId },
+  });
+
+  return { ok: true, data: { deletedClassId: classId } };
+}
+
+async function updateMember({ classId, memberId, user, roleInClass }) {
+  const manage = await canManageClass({ classId, user });
+  if (!manage.ok) return manage;
+  const c = manage.classObj;
+
+  // no permetre canviar el rol del owner via aquesta ruta
+  if (memberId === c.professor_id) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Cannot update role for class owner",
+    };
+  }
+
+  const exists = await prisma.class_members.findUnique({
+    where: { class_id_user_id: { class_id: classId, user_id: memberId } },
+  });
+
+  if (!exists) {
+    return { ok: false, status: 404, error: "Member not found in class" };
+  }
+
+  const updated = await prisma.class_members.update({
+    where: { class_id_user_id: { class_id: classId, user_id: memberId } },
+    data: { role_in_class: roleInClass },
+  });
+
+  return { ok: true, data: updated };
+}
 
 module.exports = {
   createClass,
@@ -187,5 +269,7 @@ module.exports = {
   addMembersByEmail,
   removeMember,
   leaveClass,
+  updateClass,
+  deleteClass,
+  updateMember,
 };
-
