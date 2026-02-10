@@ -142,12 +142,9 @@ async function updateGroup({ groupId, user, nom, descripcio }) {
   if (!manage.ok) return manage;
 
   const dataToUpdate = {};
-  if (typeof nom === "string") {
-    dataToUpdate.nom = nom;
-  }
+  if (typeof nom === "string") dataToUpdate.nom = nom;
   if (descripcio !== undefined) {
-    dataToUpdate.descripcio =
-      typeof descripcio === "string" ? descripcio : null;
+    dataToUpdate.descripcio = typeof descripcio === "string" ? descripcio : null;
   }
 
   const updated = await prisma.work_groups.update({
@@ -178,9 +175,7 @@ async function addMember({ groupId, user, targetEmail, targetUserId, memberRole 
     targetUser = await prisma.users.findUnique({ where: { email: targetEmail } });
   }
 
-  if (!targetUser) {
-    return { ok: false, status: 404, error: "User not found" };
-  }
+  if (!targetUser) return { ok: false, status: 404, error: "User not found" };
 
   const exists = await prisma.group_members.findUnique({
     where: { group_id_user_id: { group_id: groupId, user_id: targetUser.id } },
