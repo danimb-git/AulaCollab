@@ -30,6 +30,7 @@ model classes {
   class_members class_members[]
   documents     documents[]
   users         users @relation(fields: [professor_id], references: [id], onUpdate: NoAction)
+  work_groups   work_groups[]
 
   @@index([professor_id], map: "idx_classes_professor")
 }
