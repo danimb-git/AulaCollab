@@ -1,21 +1,22 @@
 require("dotenv").config();
+const http = require("http");
+const { Server } = require("socket.io");
 
 const env = require("./config/env");
 const app = require("./app");
-const http = require("http");
-const { initSocket } = require("./socket");
 
-const httpServer = http.createServer(app);
-const io = initSocket(httpServer);
-const initRealtime = require("./realtime"); 
+const initSocket = require("./socket");
+const initRealtime = require("./realtime");
 
-// creem el servidor HTTP amb Express
 const server = http.createServer(app);
 
-// inicialitzem la part de Realtime amb Socket.io
-initRealtime(server);
+const io = new Server(server, {
+  cors: { origin: "*", methods: ["GET", "POST"] },
+});
 
-// posem el servidor a escoltar
+initSocket(io);
+initRealtime(io);
+
 server.listen(env.PORT, () => {
   console.log(`✅ Backend + Socket.io running on http://localhost:${env.PORT}`);
 });

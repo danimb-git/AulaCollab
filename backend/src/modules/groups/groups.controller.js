@@ -33,6 +33,7 @@ async function createGroup(req, res) {
       descripcio,
       ownerId,
       classId: typeof classId === "string" ? classId : undefined,
+      user: req.user,
     });
 
     if (!result.ok) {
@@ -53,8 +54,13 @@ async function createGroup(req, res) {
 // GET /api/groups
 async function listGroupsForUser(req, res) {
   try {
-    const groups = await groupsService.listGroupsForUser({ user: req.user });
-    return res.json({ ok: true, data: groups });
+    const result = await groupsService.listGroupsForUser({ user: req.user });
+    if (!result.ok) {
+      return res
+        .status(result.status)
+        .json({ ok: false, error: result.error });
+    }
+    return res.json({ ok: true, data: result.data });
   } catch (e) {
     console.error(e);
     return res
@@ -281,4 +287,3 @@ module.exports = {
   removeMember,
   updateMember,
 };
-

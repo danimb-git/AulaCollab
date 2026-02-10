@@ -7,11 +7,11 @@ const { createUpload } = require("../common/middlewares/upload");
 
 const router = express.Router();
 
-// POST /api/classes (crear classe) - només PROFESSOR (teacher)
+// POST /api/classes (crear classe) 
 router.post(
   "/",
   requireAuth,
-  requireRole("PROFESSOR"),
+  requireRole("PROFESSOR", "ADMIN"),
   classesController.createClass
 );
 
@@ -25,7 +25,7 @@ router.get("/:id", requireAuth, classesController.getClassDetail);
 router.post(
   "/:id/members",
   requireAuth,
-  requireRole("PROFESSOR"),
+  requireRole("PROFESSOR", "ADMIN"),
   classesController.addMembersByEmail
 );
 
@@ -33,7 +33,7 @@ router.post(
 router.delete(
   "/:id/members/:userId",
   requireAuth,
-  requireRole("PROFESSOR"),
+  requireRole("PROFESSOR", "ADMIN"),
   classesController.removeMember
 );
 

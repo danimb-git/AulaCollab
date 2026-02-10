@@ -5,47 +5,74 @@ function isAdmin(user) {
   return user?.role === "ADMIN";
 }
 
-async function isMemberOfClass({ classId, userId }) {
-  const membership = await prisma.class_members.findUnique({
-    where: { class_id_user_id: { class_id: classId, user_id: userId } },
-  });
-  return !!membership;
+function isStudent(user) {
+  return user?.role === "ALUMNE";
 }
 
-async function createGroup({ nom, descripcio, ownerId, classId }) {
-  const groupId = uuidv4();
+async function getGroupById(groupId) {
+  return prisma.work_groups.findUnique({ where: { id: groupId } });
+}
 
-  let classConnect = undefined;
+async function isMember(groupId, userId) {
+  const member = await prisma.group_members.findUnique({
+    where: { group_id_user_id: { group_id: groupId, user_id: userId } },
+  });
+  return Boolean(member);
+}
+
+async function canAccessGroup({ groupId, user }) {
+  const group = await getGroupById(groupId);
+  if (!group) return { ok: false, status: 404, error: "Group not found" };
+
+  if (isAdmin(user)) return { ok: true, group };
+
+  if (!isStudent(user)) {
+    return { ok: false, status: 403, error: "Only students can access groups" };
+  }
+
+  const member = await isMember(groupId, user.id);
+  if (!member) return { ok: false, status: 403, error: "Forbidden" };
+
+  return { ok: true, group };
+}
+
+async function canManageGroup({ groupId, user }) {
+  const group = await getGroupById(groupId);
+  if (!group) return { ok: false, status: 404, error: "Group not found" };
+
+  if (isAdmin(user)) return { ok: true, group };
+
+  if (!isStudent(user)) {
+    return { ok: false, status: 403, error: "Only students can manage groups" };
+  }
+
+  if (group.owner_id !== user.id) {
+    return { ok: false, status: 403, error: "Only group owner can manage this group" };
+  }
+
+  return { ok: true, group };
+}
+
+async function createGroup({ nom, descripcio, ownerId, classId, user }) {
+  if (!isStudent(user) && !isAdmin(user)) {
+    return { ok: false, status: 403, error: "Only students or admins can create groups" };
+  }
 
   if (classId) {
     const c = await prisma.classes.findUnique({ where: { id: classId } });
-    if (!c) {
-      return { ok: false, status: 400, error: "Linked class not found" };
-    }
-
-    // Si el grup està lligat a una classe, el creador ha de ser professor/owner
-    // o membre de la classe.
-    const isMember = await isMemberOfClass({ classId, userId: ownerId });
-    if (!isMember && c.professor_id !== ownerId) {
-      return {
-        ok: false,
-        status: 403,
-        error: "You must belong to the class to create a group for it",
-      };
-    }
-
-    classConnect = { connect: { id: classId } };
+    if (!c) return { ok: false, status: 404, error: "Class not found" };
   }
 
-  const created = await prisma.work_groups.create({
+  const id = uuidv4();
+
+  const group = await prisma.work_groups.create({
     data: {
-      id: groupId,
+      id,
       nom,
       descripcio: typeof descripcio === "string" ? descripcio : null,
       owner_id: ownerId,
-      ...(classConnect ? { classes: classConnect } : {}),
+      class_id: classId || null,
       group_members: {
-        // afegim owner com a membre
         create: {
           user_id: ownerId,
           member_role: "OWNER",
@@ -54,17 +81,22 @@ async function createGroup({ nom, descripcio, ownerId, classId }) {
     },
   });
 
-  return { ok: true, data: created };
+  return { ok: true, data: group };
 }
 
 async function listGroupsForUser({ user }) {
   if (isAdmin(user)) {
-    return prisma.work_groups.findMany({
+    const groups = await prisma.work_groups.findMany({
       orderBy: { created_at: "desc" },
     });
+    return { ok: true, data: groups };
   }
 
-  return prisma.work_groups.findMany({
+  if (!isStudent(user)) {
+    return { ok: false, status: 403, error: "Only students can list groups" };
+  }
+
+  const groups = await prisma.work_groups.findMany({
     where: {
       OR: [
         { owner_id: user.id },
@@ -77,39 +109,8 @@ async function listGroupsForUser({ user }) {
     },
     orderBy: { created_at: "desc" },
   });
-}
 
-async function canAccessGroup({ groupId, user }) {
-  const g = await prisma.work_groups.findUnique({ where: { id: groupId } });
-  if (!g) return { ok: false, status: 404, error: "Group not found" };
-
-  if (isAdmin(user)) return { ok: true, group: g };
-  if (g.owner_id === user.id) return { ok: true, group: g };
-
-  const membership = await prisma.group_members.findUnique({
-    where: { group_id_user_id: { group_id: groupId, user_id: user.id } },
-  });
-
-  if (!membership) {
-    return { ok: false, status: 403, error: "Forbidden" };
-  }
-
-  return { ok: true, group: g };
-}
-
-async function canManageGroup({ groupId, user }) {
-  const g = await prisma.work_groups.findUnique({ where: { id: groupId } });
-  if (!g) return { ok: false, status: 404, error: "Group not found" };
-
-  if (isAdmin(user) || g.owner_id === user.id) {
-    return { ok: true, group: g };
-  }
-
-  return {
-    ok: false,
-    status: 403,
-    error: "Only group owner or admin can manage this group",
-  };
+  return { ok: true, data: groups };
 }
 
 async function getGroupDetail({ groupId, user }) {
@@ -122,19 +123,10 @@ async function getGroupDetail({ groupId, user }) {
       owner: {
         select: { id: true, nom: true, cognom: true, email: true, rol: true },
       },
-      classes: {
-        select: { id: true, nom: true, professor_id: true },
-      },
       group_members: {
         include: {
           users: {
-            select: {
-              id: true,
-              nom: true,
-              cognom: true,
-              email: true,
-              rol: true,
-            },
+            select: { id: true, nom: true, cognom: true, email: true, rol: true },
           },
         },
         orderBy: { joined_at: "asc" },
@@ -150,12 +142,9 @@ async function updateGroup({ groupId, user, nom, descripcio }) {
   if (!manage.ok) return manage;
 
   const dataToUpdate = {};
-  if (typeof nom === "string") {
-    dataToUpdate.nom = nom;
-  }
+  if (typeof nom === "string") dataToUpdate.nom = nom;
   if (descripcio !== undefined) {
-    dataToUpdate.descripcio =
-      typeof descripcio === "string" ? descripcio : null;
+    dataToUpdate.descripcio = typeof descripcio === "string" ? descripcio : null;
   }
 
   const updated = await prisma.work_groups.update({
@@ -178,73 +167,25 @@ async function deleteGroup({ groupId, user }) {
 async function addMember({ groupId, user, targetEmail, targetUserId, memberRole }) {
   const manage = await canManageGroup({ groupId, user });
   if (!manage.ok) return manage;
-  const g = manage.group;
 
   let targetUser = null;
-
-  if (targetEmail) {
-    const normalized = String(targetEmail || "").trim().toLowerCase();
-    targetUser = await prisma.users.findUnique({ where: { email: normalized } });
-    if (!targetUser) {
-      return { ok: false, status: 404, error: "User with given email not found" };
-    }
-  } else if (targetUserId) {
+  if (targetUserId) {
     targetUser = await prisma.users.findUnique({ where: { id: targetUserId } });
-    if (!targetUser) {
-      return { ok: false, status: 404, error: "User with given id not found" };
-    }
-  } else {
-    return {
-      ok: false,
-      status: 400,
-      error: "Either email or userId must be provided",
-    };
+  } else if (targetEmail) {
+    targetUser = await prisma.users.findUnique({ where: { email: targetEmail } });
   }
 
-  // Si el grup pertany a una classe, nomès es poden afegir membres
-  // que també siguin membres (o professor) d'aquesta classe.
-  if (g.class_id) {
-    const c = await prisma.classes.findUnique({ where: { id: g.class_id } });
-    if (!c) {
-      return {
-        ok: false,
-        status: 500,
-        error: "Linked class not found for this group",
-      };
-    }
-
-    const isMember = await isMemberOfClass({
-      classId: g.class_id,
-      userId: targetUser.id,
-    });
-
-    if (!isMember && c.professor_id !== targetUser.id) {
-      return {
-        ok: false,
-        status: 400,
-        error: "User must belong to the linked class to join this group",
-      };
-    }
-  }
+  if (!targetUser) return { ok: false, status: 404, error: "User not found" };
 
   const exists = await prisma.group_members.findUnique({
-    where: {
-      group_id_user_id: { group_id: groupId, user_id: targetUser.id },
-    },
+    where: { group_id_user_id: { group_id: groupId, user_id: targetUser.id } },
   });
 
   if (exists) {
-    return {
-      ok: true,
-      data: {
-        groupId,
-        userId: targetUser.id,
-        alreadyMember: true,
-      },
-    };
+    return { ok: true, data: { groupId, added: [], alreadyMember: [targetUser.id] } };
   }
 
-  const created = await prisma.group_members.create({
+  await prisma.group_members.create({
     data: {
       group_id: groupId,
       user_id: targetUser.id,
@@ -252,36 +193,23 @@ async function addMember({ groupId, user, targetEmail, targetUserId, memberRole 
     },
   });
 
-  return {
-    ok: true,
-    data: {
-      groupId,
-      membership: created,
-      alreadyMember: false,
-    },
-  };
+  return { ok: true, data: { groupId, added: [targetUser.id], alreadyMember: [] } };
 }
 
 async function removeMember({ groupId, memberId, user }) {
   const manage = await canManageGroup({ groupId, user });
   if (!manage.ok) return manage;
-  const g = manage.group;
+  const group = manage.group;
 
-  if (memberId === g.owner_id) {
-    return {
-      ok: false,
-      status: 400,
-      error: "Cannot remove group owner",
-    };
+  if (memberId === group.owner_id) {
+    return { ok: false, status: 400, error: "Cannot remove group owner" };
   }
 
   const exists = await prisma.group_members.findUnique({
     where: { group_id_user_id: { group_id: groupId, user_id: memberId } },
   });
 
-  if (!exists) {
-    return { ok: false, status: 404, error: "Member not found in group" };
-  }
+  if (!exists) return { ok: false, status: 404, error: "Member not found in group" };
 
   await prisma.group_members.delete({
     where: { group_id_user_id: { group_id: groupId, user_id: memberId } },
@@ -293,23 +221,17 @@ async function removeMember({ groupId, memberId, user }) {
 async function updateMember({ groupId, memberId, user, memberRole }) {
   const manage = await canManageGroup({ groupId, user });
   if (!manage.ok) return manage;
-  const g = manage.group;
+  const group = manage.group;
 
-  if (memberId === g.owner_id) {
-    return {
-      ok: false,
-      status: 400,
-      error: "Cannot update role for group owner",
-    };
+  if (memberId === group.owner_id) {
+    return { ok: false, status: 400, error: "Cannot update role for group owner" };
   }
 
   const exists = await prisma.group_members.findUnique({
     where: { group_id_user_id: { group_id: groupId, user_id: memberId } },
   });
 
-  if (!exists) {
-    return { ok: false, status: 404, error: "Member not found in group" };
-  }
+  if (!exists) return { ok: false, status: 404, error: "Member not found in group" };
 
   const updated = await prisma.group_members.update({
     where: { group_id_user_id: { group_id: groupId, user_id: memberId } },
@@ -320,6 +242,11 @@ async function updateMember({ groupId, memberId, user, memberRole }) {
 }
 
 module.exports = {
+  getGroupById,
+  isMember,
+  canAccessGroup,
+  isAdmin,
+  canManageGroup,
   createGroup,
   listGroupsForUser,
   getGroupDetail,
@@ -329,4 +256,3 @@ module.exports = {
   removeMember,
   updateMember,
 };
-

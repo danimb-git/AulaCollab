@@ -1,9 +1,20 @@
 const express = require("express");
 const requireAuth = require("../common/middlewares/requireAuth");
+const groupsController = require("../modules/groups/groups.controller");
 const { createUpload } = require("../common/middlewares/upload");
 const documentsController = require("../modules/documents/documents.controller");
 
 const router = express.Router();
+
+// CRUD (groups)
+router.post("/", requireAuth, groupsController.createGroup);
+router.get("/", requireAuth, groupsController.listGroupsForUser);
+router.get("/:id", requireAuth, groupsController.getGroupDetail);
+router.patch("/:id", requireAuth, groupsController.updateGroup);
+router.delete("/:id", requireAuth, groupsController.deleteGroup);
+router.post("/:id/members", requireAuth, groupsController.addMember);
+router.delete("/:id/members/:userId", requireAuth, groupsController.removeMember);
+router.patch("/:id/members/:userId", requireAuth, groupsController.updateMember);
 
 // Documents (groups)
 const groupUpload = createUpload("groups");

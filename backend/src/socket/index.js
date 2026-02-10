@@ -1,4 +1,3 @@
-const { Server } = require("socket.io");
 const jwt = require("jsonwebtoken");
 const pool = require("../db/pool");
 
@@ -74,22 +73,15 @@ async function userExists(userId) {
   return r.rowCount > 0;
 }
 
-function initSocket(httpServer) {
-  const io = new Server(httpServer, {
-    cors: {
-      origin: "*",
-      methods: ["GET", "POST"],
-    },
-  });
-
-  // ✅ PAS 4: middleware d'autenticació abans de connection
+function initSocket(io) {
+  // middleware d'autenticació abans de connection
   io.use((socket, next) => {
     try {
-      // 1) Intentem agafar token de handshake.auth (RECOMANAT)
+      // Intentem agafar token de handshake.auth (RECOMANAT)
       let token = socket.handshake.auth?.token;
-      console.log("🟡 TOKEN:", token);
-      console.log("🟡 handshake.auth:", socket.handshake.auth);
-      console.log("🟡 token present?", !!token);
+      console.log(" TOKEN:", token);
+      console.log(" handshake.auth:", socket.handshake.auth);
+      console.log(" token present?", !!token);
 
       // 2) Si no hi és, provem headers (Authorization: Bearer ...)
       if (!token) {
@@ -106,7 +98,7 @@ function initSocket(httpServer) {
 
       // 4) Verificar JWT
       const payload = jwt.verify(token, process.env.JWT_SECRET);
-      console.log("🟢 JWT PAYLOAD REAL:", payload);
+      console.log(" JWT PAYLOAD REAL:", payload);
 
       // 5) Guardar usuari al socket
       const userId = payload.sub || payload.id || payload.userId;
@@ -121,22 +113,22 @@ function initSocket(httpServer) {
         role: payload.role,
       };
 
-      console.log("🟢 socket.user:", socket.user);
+      console.log(" socket.user:", socket.user);
 
       // 6) OK → acceptar connexió
       return next();
     } catch (err) {
-      console.log("🔴 auth error:", err.message);
+      console.log(" auth error:", err.message);
       return next(new Error("Invalid token"));
     }
   });
 
-  // ✅ Si passa el middleware, arriba aquí
+  // Si passa el middleware, arriba aquí
   io.on("connection", (socket) => {
-    console.log("✅ Socket connected:", socket.id, "user:", socket.user);
+    console.log(" Socket connected:", socket.id, "user:", socket.user);
 
     socket.on("disconnect", () => {
-      console.log("❌ Socket disconnected:", socket.id);
+      console.log(" Socket disconnected:", socket.id);
     });
 
     socket.on("join_room", async ({ room }, ack) => {
@@ -232,8 +224,6 @@ function initSocket(httpServer) {
           if (!ok) return ack?.({ ok: false, error: "Forbidden (group)" });
         }
 
-        // DM: permís implícit si receiver existeix
-
         // 4) Persistència a BD (INSERT)
         const insert = await pool.query(
           `
@@ -269,7 +259,6 @@ function initSocket(httpServer) {
         if (!room) return ack?.({ ok: false, error: "Could not build room" });
 
         // 6) Emitim a la room
-        // IMPORTANT: els clients han d'haver fet join_room abans si volen rebre-ho
         io.to(room).emit("new_message", messageSaved);
 
         // 7) ACK al sender
@@ -283,4 +272,4 @@ function initSocket(httpServer) {
   return io;
 }
 
-module.exports = { initSocket };
+module.exports = initSocket;
