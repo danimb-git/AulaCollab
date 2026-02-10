@@ -1,0 +1,29 @@
+services:
+  api:
+    # En modo "prod-like" reutilizamos la misma imagen, pero sin volúmenes
+    # y sin nodemon. Asumimos que las dependencias ya están instaladas en la imagen.
+    command: >
+      sh -c "
+        npm run migrate &&
+        node src/server.js
+      "
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_SSL: "false"
+
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
+      TEACHER_SIGNUP_PIN: ${TEACHER_SIGNUP_PIN}
+
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+
+    # En prod-like normalmente no expondrías la BD al host,
+    # pero mantenemos la configuración del servicio db del compose base.
+
