@@ -1,8 +1,6 @@
 -- 007_messages_context.sql
 -- Amplia la taula messages per suportar DM + Class + Group amb un sol model.
 
-BEGIN;
-
 -- 1) Afegim camps de context
 ALTER TABLE messages
   ADD COLUMN IF NOT EXISTS context_type TEXT NOT NULL DEFAULT 'dm',
@@ -44,5 +42,3 @@ CREATE INDEX IF NOT EXISTS idx_messages_sender
 -- (D) created_at (ja el teniu, però idem)
 CREATE INDEX IF NOT EXISTS idx_messages_time
   ON messages(created_at);
-
-COMMIT;
