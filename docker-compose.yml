@@ -1,16 +1,72 @@
 services:
   db:
-    image: postgres:15
+    image: postgres:16-alpine
     container_name: aulacollab_db
     restart: unless-stopped
     environment:
+      # Estos valores se leen de variables de entorno del host o de un .env en la raíz del repo.
+      # Ejemplo en README.md / .env.example
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     ports:
       - "5432:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: aulacollab_api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Variables usadas por src/config/env.js
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_SSL: "false"
+
+      # JWT y otros secretos: se leen también desde el entorno / .env
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
+      TEACHER_SIGNUP_PIN: ${TEACHER_SIGNUP_PIN}
+
+      # Prisma: se conecta al servicio "db" del compose
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+
+      # Node / entorno
+      NODE_ENV: development
+      PORT: 3000
+
+      # Para mejorar el hot reload sobre volúmenes en Windows
+      CHOKIDAR_USEPOLLING: "true"
+
+    ports:
+      - "3000:3000"
+
+    volumes:
+      # Montamos el código fuente para hot reload
+      - ./backend:/app
+      # Volumen anónimo para node_modules (evita que Windows pise la carpeta)
+      - /app/node_modules
+
+    command: >
+      sh -c "
+        npm install &&
+        npx prisma generate &&
+        npm run migrate &&
+        nodemon src/server.js
+      "
 
 volumes:
   db_data:
