@@ -1,15 +1,8 @@
-const { Server } = require("socket.io");
 const { verifyAccessToken } = require("../config/jwt");
 const registerWebRTCHandlers = require("./webrtc");
 
-// Inicialitza el servidor de WebSocket amb Socket.IO i gestiona l'autenticació i les connexions dels clients
-function initRealtime(httpServer) {
-  const io = new Server(httpServer, {
-    cors: {
-      origin: "*", // canvia-ho per la URL del teu frontend en producció
-    },
-  });
-
+// Inicialitza els handlers de WebRTC sobre una instància ja creada de Socket.IO
+function initRealtime(io) {
   // autenticació de l'usuari en la connexió
   io.use((socket, next) => {
     try {
@@ -20,7 +13,6 @@ function initRealtime(httpServer) {
 
       socket.data.userId = payload.sub;
       socket.data.role = payload.role ?? payload.rol;
-
 
       next();
     } catch (err) {
