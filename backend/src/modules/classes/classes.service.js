@@ -201,25 +201,6 @@ async function leaveClass({ classId, user }) {
   return { ok: true, data: { classId, leftUserId: user.id } };
 }
 
-
-  // l'owner no pot abandonar (no hi ha transferència d'owner en aquest mòdul)
-  if (c.professor_id === user.id) {
-    return { ok: false, status: 400, error: "Class owner cannot leave the class" };
-  }
-
-  const exists = await prisma.class_members.findUnique({
-    where: { class_id_user_id: { class_id: classId, user_id: user.id } },
-  });
-
-  if (!exists) return { ok: false, status: 404, error: "You are not a member of this class" };
-
-  await prisma.class_members.delete({
-    where: { class_id_user_id: { class_id: classId, user_id: user.id } },
-  });
-
-  return { ok: true, data: { classId, leftUserId: user.id } };
-}
-
 async function updateClass({ classId, user, nom, descripcio }) {
   const manage = await canManageClass({ classId, user });
   if (!manage.ok) return manage;
