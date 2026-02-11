@@ -1,0 +1,751 @@
+/* Base (opcional però recomanat) */
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+}
+
+/* =========================================================
+   AUTH PAGES
+   (LoginPage.vue, RegisterPage.vue, FormField.vue, etc.)
+   ========================================================= */
+
+.auth-page {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.auth-page--login {
+    padding: 110px 0px;
+}
+
+.auth-page--register {
+    padding: 110px 0px;
+}
+
+.auth-title {
+    margin: 0;
+    font-size: 44px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+}
+
+.auth-form {
+    width: 520px;
+    margin-top: 55px;
+}
+
+.form-field {
+    margin-bottom: 26px;
+}
+
+.form-label {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 14px;
+}
+
+.form-label--center {
+    text-align: center;
+}
+
+.form-label--left {
+    text-align: left;
+}
+
+.form-input {
+    width: 100%;
+    height: 44px;
+    border: none;
+    outline: none;
+    background: #d9d9d9;
+    font-size: 18px;
+    text-align: center;
+    border-radius: 2px;
+}
+
+.form-input::placeholder {
+    color: #3a3a3a;
+    opacity: 0.75;
+}
+
+/* Actions: link left + button right */
+.auth-actions {
+    margin-top: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.auth-link {
+    font-size: 14px;
+    color: #000;
+    text-decoration: none;
+    font-style: italic;
+}
+
+.auth-link:hover {
+    text-decoration: underline;
+}
+
+/* Button (gris) */
+.btn {
+    border: none;
+    background: #d9d9d9;
+    padding: 8px 22px;
+    font-size: 16px;
+    border-radius: 14px;
+    cursor: pointer;
+}
+
+.btn:active {
+    transform: translateY(1px);
+}
+
+/* Checkbox professor */
+.teacher-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 6px;
+}
+
+.teacher-checkbox {
+    width: 18px;
+    height: 18px;
+}
+
+.teacher-label {
+    font-size: 16px;
+    font-style: italic;
+}
+
+.secret-field {
+    margin-top: 10px;
+    margin-bottom: 4px;
+}
+
+.secret-input {
+    width: 360px;
+    margin-left: 34px;
+    text-align: left;
+    padding-left: 22px;
+}
+
+/* =========================================================
+   APP (MOODLE)
+   (MoodleHomePage.vue + TopBar/LeftDrawer/RightChatDrawer + CreateClassPage.vue + CreateGroupPage.vue)
+   ========================================================= */
+
+.app-shell {
+    min-height: 100vh;
+    background: #fff;
+}
+
+/* Topbar */
+.topbar {
+    height: 90px;
+    background: #d9d9d9;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 26px;
+    position: relative;
+}
+
+.topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.icon-btn {
+    width: 54px;
+    height: 54px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+}
+
+.hamburger {
+    width: 34px;
+    height: 4px;
+    background: #000;
+    position: relative;
+}
+
+.hamburger::before,
+.hamburger::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    width: 34px;
+    height: 4px;
+    background: #000;
+}
+
+.hamburger::before {
+    top: -10px;
+}
+
+.hamburger::after {
+    top: 10px;
+}
+
+.msg-icon {
+    width: 0;
+    height: 0;
+    border-left: 18px solid #000;
+    border-top: 18px solid transparent;
+    border-bottom: 18px solid transparent;
+    transform: rotate(90deg);
+}
+
+.profile-btn {
+    background: #fff;
+    border: 1px solid #cfcfcf;
+    height: 44px;
+    width: 170px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 10px 0 16px;
+    cursor: pointer;
+}
+
+.profile-text {
+    font-size: 18px;
+}
+
+.profile-avatar {
+    width: 30px;
+    height: 30px;
+    background: #d9d9d9;
+    border-radius: 999px;
+}
+
+/* Dropdown perfil */
+.profile-menu {
+    position: absolute;
+    right: 26px;
+    top: 90px;
+    width: 170px;
+    border: 2px solid #000;
+    background: #fff;
+}
+
+.profile-menu button {
+    width: 100%;
+    border: none;
+    background: transparent;
+    padding: 14px 12px;
+    text-align: left;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+.profile-menu button:hover {
+    background: #f2f2f2;
+}
+
+/* Overlay quan obres un drawer */
+.overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.08);
+}
+
+/* Drawer base */
+.drawer {
+    position: fixed;
+    top: 90px;
+    /* just sota topbar */
+    bottom: 0;
+    width: 330px;
+    background: #d9d9d9;
+    padding: 26px;
+    overflow: auto;
+    z-index: 10;
+}
+
+.drawer-left {
+    left: 0;
+}
+
+.drawer-right {
+    right: 0;
+    width: 380px;
+    background: #fff;
+    border-left: 2px solid #d9d9d9;
+}
+
+/* Drawer content */
+.drawer-title {
+    font-size: 22px;
+    margin: 0 0 18px 0;
+}
+
+.drawer-section-title {
+    margin: 18px 0 10px;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.drawer-item {
+    padding: 10px 0;
+    cursor: pointer;
+    font-size: 18px;
+}
+
+.drawer-item:hover {
+    text-decoration: underline;
+}
+
+/* Chat drawer (RightChatDrawer.vue) */
+.chat-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 0;
+    cursor: pointer;
+}
+
+.chat-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 999px;
+    background: #d9d9d9;
+}
+
+.chat-name-box {
+    flex: 1;
+    background: #fff;
+    padding: 16px 18px;
+    border: 1px solid #eee;
+}
+
+.chat-conversation {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.chat-messages {
+    flex: 1;
+    padding: 10px;
+    background: #fff;
+    border: 1px solid #eee;
+    overflow: auto;
+}
+
+.msg-left {
+    background: #d9d9d9;
+    height: 120px;
+    width: 65%;
+    margin: 20px 0;
+}
+
+.msg-right {
+    background: #d9d9d9;
+    height: 120px;
+    width: 85%;
+    margin: 20px 0 0 auto;
+}
+
+.msg-left.small {
+    height: 80px;
+    width: 55%;
+}
+
+.chat-input-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.chat-input {
+    width: 100%;
+    height: 44px;
+    border: none;
+    outline: none;
+    background: #d9d9d9;
+    border-radius: 2px;
+    padding-left: 14px;
+    font-size: 16px;
+    text-align: left;
+}
+
+.send-arrow {
+    font-size: 28px;
+    font-weight: 800;
+}
+
+/* Moodle content */
+.main {
+    padding: 40px 0 80px;
+    display: flex;
+    justify-content: center;
+}
+
+.moodle-title {
+    text-align: center;
+    font-size: 44px;
+    font-weight: 800;
+    margin: 40px 0 30px;
+}
+
+.columns {
+    width: 1180px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 70px;
+}
+
+.section-header {
+    background: #d9d9d9;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 18px;
+    margin-bottom: 22px;
+}
+
+.section-header .title {
+    font-size: 20px;
+    margin: 0;
+}
+
+.create-btn {
+    background: #fff;
+    border: 1px solid #cfcfcf;
+    border-radius: 18px;
+    padding: 8px 14px;
+    cursor: pointer;
+}
+
+/* Cards grid */
+.cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 26px;
+}
+
+.card {
+    background: #d9d9d9;
+    padding: 18px;
+    position: relative;
+    height: 190px;
+}
+
+.card-thumb {
+    height: 70px;
+    background: #fff;
+    margin-bottom: 18px;
+}
+
+.card-name {
+    font-size: 22px;
+    font-weight: 700;
+    margin: 0;
+}
+
+.card-arrow {
+    position: absolute;
+    right: 18px;
+    bottom: 18px;
+    font-size: 26px;
+    font-weight: 800;
+}
+
+.form-textarea {
+    width: 100%;
+    background: #d9d9d9;
+    border: none;
+    outline: none;
+    padding: 14px;
+    font-size: 18px;
+    resize: none;
+}
+
+/* =========================
+   MODAL (overlay + caixa)
+   ========================= */
+
+.modalOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+.modalBox {
+    position: relative;
+    width: 560px;
+    max-width: calc(100vw - 48px);
+    background: #fff;
+    border: 2px solid #000;
+}
+
+.modalContent {
+    padding: 28px 34px 26px;
+}
+
+.modalClose {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    border: none;
+    background: transparent;
+    font-size: 28px;
+    font-weight: 700;
+    cursor: pointer;
+    line-height: 1;
+    text-transform: lowercase;
+}
+
+/* títol dins de modal (opcional) */
+.modalTitle {
+    margin: 0 0 18px 0;
+    font-size: 22px;
+    font-weight: 700;
+    text-align: left;
+}
+
+/* =========================
+   MODAL - LLISTAT ALUMNES
+   (wireframe: llista simple)
+   ========================= */
+
+.studentsModal .studentsList {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.studentItem {
+    font-size: 20px;
+    font-weight: 500;
+}
+
+/* si la llista és molt llarga */
+.studentsModal .studentsList {
+    max-height: 520px;
+    overflow: auto;
+    padding-right: 6px;
+}
+
+/* =========================
+   MODAL - AFEGIR ALUMNE
+   (wireframe: input + botó a la dreta)
+   ========================= */
+
+.addStudentModal {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+/* el botó "Afegir" a la dreta */
+.modalActions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 8px;
+}
+
+/* =========================
+   MODAL - CHAT DE CLASSE
+   (wireframe: caixa gran + input a baix)
+   ========================= */
+
+.chatModal {
+    width: 680px;
+    max-width: calc(100vw - 48px);
+}
+
+.chatMessages {
+    height: 420px;
+    overflow: auto;
+    border: 1px solid #000;
+    padding: 14px;
+    background: #fff;
+    margin-bottom: 14px;
+}
+
+.chatMsg {
+    font-size: 14px;
+    margin-bottom: 10px;
+}
+
+.chatInputRow {
+    display: grid;
+    grid-template-columns: 1fr 48px;
+    gap: 10px;
+    align-items: center;
+}
+
+.chatInput {
+    height: 44px;
+    border: 2px solid #000;
+    padding: 0 12px;
+    font-size: 14px;
+    outline: none;
+}
+
+.chatSendBtn {
+    height: 44px;
+    border: 2px solid #000;
+    background: #fff;
+    cursor: pointer;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+/* =========================
+   PETIT DEV BOX (toggle rol)
+   ========================= */
+
+.devBox {
+    margin-top: 18px;
+    display: flex;
+    justify-content: center;
+}
+
+.devLabel {
+    font-size: 14px;
+    opacity: 0.7;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+/* =========================================================
+   CLASS PAGE (ClassPage.vue)
+   ========================================================= */
+
+.page {
+    padding: 40px 0 80px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.pageTitle {
+    text-align: center;
+    font-size: 44px;
+    font-weight: 800;
+    margin: 40px 0 22px;
+}
+
+.wideBanner {
+    width: 1180px;
+    background: #d9d9d9;
+    height: 44px;
+    display: flex;
+    align-items: center;
+}
+
+.wideBannerInner {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 18px;
+}
+
+/* secció descripció */
+.classDescription {
+    width: 1180px;
+    margin-top: 26px;
+    text-align: center;
+}
+
+.subtitle {
+    margin: 0 0 12px;
+    font-size: 22px;
+    font-weight: 800;
+}
+
+.descText {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.35;
+}
+
+/* botons grans (chat / videotrucada) */
+.twoButtonsRow {
+    width: 1180px;
+    margin-top: 26px;
+    display: flex;
+    justify-content: space-between;
+    gap: 34px;
+}
+
+.bigActionBtn {
+    flex: 1;
+    height: 92px;
+    background: #d9d9d9;
+    border: none;
+    cursor: pointer;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 26px;
+    font-size: 22px;
+    font-weight: 500;
+}
+
+.circleIcon {
+    width: 54px;
+    height: 54px;
+    border-radius: 999px;
+    background: #fff;
+}
+
+/* fitxers */
+.filesSection {
+    width: 1180px;
+    margin-top: 22px;
+}
+
+.filesList {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.fileRow {
+    background: #d9d9d9;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 18px;
+    cursor: pointer;
+}
+
+.fileName {
+    font-size: 20px;
+    font-weight: 800;
+}
+
+.fileDate {
+    font-size: 16px;
+    opacity: 0.75;
+}
+
+.filesFooter {
+    display: flex;
+    justify-content: center;
+    margin-top: 24px;
+}
