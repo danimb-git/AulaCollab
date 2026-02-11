@@ -60,6 +60,16 @@ defineProps({
 const emit = defineEmits(["select-chat", "back"]);
 
 function emitSelectChat(id) {
+  /**
+   * 💬 BACKEND (WebSocket):
+   *
+   * Aquí no obrim el socket.
+   * El pare podria:
+   *
+   * - connectar-se via socket.io
+   * - unir-se a la sala del chat
+   * - carregar historial via GET /chats/:id/messages
+   */
   emit("select-chat", id);
 }
 

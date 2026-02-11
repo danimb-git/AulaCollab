@@ -98,7 +98,7 @@
 
     <!-- 7) BOTÓ TEMPORAL PER PROVAR (després s'elimina)
          Serveix per veure la diferència ALUMNE/PROFESSOR sense backend. -->
-    <div style="position: fixed; left: 20px; bottom: 20px;">
+    <div style="position: fixed; left: 20px; bottom: 20px">
       <button class="create-btn" @click="toggleRoleForTesting">
         Mode: {{ isStudent ? "ALUMNE" : "PROFESSOR" }}
       </button>
@@ -109,13 +109,20 @@
 <script setup>
 /**
  * MoodleHomePage.vue
- * Aquesta pàgina és la HOME després de fer login.
- * - Mostra el TopBar
- * - Obre / tanca menús laterals
- * - Mostra cards de Classes i (si és alumne) Grups
+ *
+ * Aquesta és la pàgina principal després de fer login.
+ *
+ * Actualment:
+ *  - Les dades són MOCK (arrays locals).
+ *  - No hi ha connexió real amb backend.
+ *
+ * Més endavant:
+ *  - Les classes vindran de GET /classes
+ *  - Els grups vindran de GET /groups
+ *  - Els xats vindran de GET /chats o via WebSocket
  */
 
-import { ref } from "vue";
+import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 
 import TopBar from "../../components/app/TopBar.vue";
@@ -125,53 +132,67 @@ import RightChatDrawer from "../../components/app/RightChatDrawer.vue";
 const router = useRouter();
 
 /* =========================================================
-   A) "DADES MOCK" (falses)
-   Més endavant aquestes dades vindran del backend.
+   A) DADES (MOCK)
    ========================================================= */
+
+/**
+ * 🔌 BACKEND:
+ * Aquí NO haurien de ser arrays fixos.
+ *
+ * Aquí faríem:
+ *
+ *   onMounted(async () => {
+ *     const response = await api.get("/classes")
+ *     classes.value = response.data
+ *   })
+ *
+ * I el mateix per grups.
+ */
+
 const mockClasses = ref([
   { id: 1, name: "Classe 1" },
   { id: 2, name: "Classe 2" },
   { id: 3, name: "Classe 3" },
-  { id: 4, name: "Classe 4" },
-  { id: 5, name: "Classe 5" },
-  { id: 6, name: "Classe 6" },
 ]);
 
 const mockGroups = ref([
   { id: 1, name: "Grup d’estudi 1" },
   { id: 2, name: "Grup d’estudi 2" },
-  { id: 3, name: "Grup d’estudi 3" },
-  { id: 4, name: "Grup d’estudi 4" },
-  { id: 5, name: "Grup d’estudi 5" },
-  { id: 6, name: "Grup d’estudi 6" },
 ]);
 
 const mockChats = ref([
   { id: 1, name: "Usuari 1" },
   { id: 2, name: "Usuari 2" },
-  { id: 3, name: "Usuari 3" },
-  { id: 4, name: "Usuari 4" },
 ]);
 
 /* =========================================================
-   B) ESTAT DE LA UI (què està obert / tancat)
+   B) ESTAT UI
    ========================================================= */
-const leftMenuOpen = ref(false);        // menú esquerre
-const chatMenuOpen = ref(false);        // menú dret (xats)
-const isProfileMenuOpen = ref(false);   // dropdown perfil
-const selectedChatId = ref(null);       // quin xat estem veient (conversa)
+
+const leftMenuOpen = ref(false);
+const chatMenuOpen = ref(false);
+const isProfileMenuOpen = ref(false);
+const selectedChatId = ref(null);
 
 /* =========================================================
-   C) ROL (temporal)
-   Després, vindrà del login/token.
+   C) ROL (més endavant vindrà del token JWT)
    ========================================================= */
+
+/**
+ * 🔐 BACKEND:
+ * El rol real (alumne/professor) vindrà del login.
+ *
+ * Per exemple:
+ *  const user = decodeJWT(token)
+ *  isStudent.value = user.role === "STUDENT"
+ */
+
 const isStudent = ref(true);
 
 /* =========================================================
-   D) FUNCIONS (què passa quan l'usuari clica)
+   D) FUNCIONS
    ========================================================= */
 
-/* Tanca menús laterals i perfil */
 function closeSidePanels() {
   leftMenuOpen.value = false;
   chatMenuOpen.value = false;
@@ -179,62 +200,72 @@ function closeSidePanels() {
   selectedChatId.value = null;
 }
 
-/* Botó hamburger (esquerra) */
 function onClickHamburger() {
   leftMenuOpen.value = !leftMenuOpen.value;
-
-  // Si obres l'esquerra, tanquem la resta
   chatMenuOpen.value = false;
   isProfileMenuOpen.value = false;
 }
 
-/* Botó xat (dreta) */
 function onClickChatIcon() {
   chatMenuOpen.value = !chatMenuOpen.value;
-
-  // Si obres el xat, tanquem la resta
   leftMenuOpen.value = false;
   isProfileMenuOpen.value = false;
 }
 
-/* Botó perfil */
 function onClickProfile() {
   isProfileMenuOpen.value = !isProfileMenuOpen.value;
 }
 
-/* Logout */
+/**
+ * 🔐 BACKEND LOGOUT:
+ * Aquí aniria:
+ *
+ * 1. Petició POST /auth/logout
+ * 2. Esborrar token del localStorage
+ * 3. Redirigir a /auth/login
+ */
 function onLogout() {
-  // Més endavant: cridar backend + esborrar token/localStorage
   router.push("/auth/login");
 }
 
-/* Obrir conversa d’un xat */
-function openChat(chatId) {
-  selectedChatId.value = chatId;
-}
-
-/* Tornar del xat (tanca conversa però deixa el panel obert) */
-function closeChatConversation() {
-  selectedChatId.value = null;
-}
-
-/* Clicar una classe */
+/**
+ * 📡 NAVEGACIÓ A CLASSE
+ *
+ * Més endavant:
+ *   router.push(`/classes/${classId}`)
+ *
+ * I la pàgina ClassDetail faria:
+ *   GET /classes/:id
+ */
 function goToClass(classId) {
   console.log("Anar a classe:", classId);
-  // Més endavant:
-  // router.push(`/classes/${classId}`)
 }
 
-/* Clicar un grup */
+/**
+ * 📡 NAVEGACIÓ A GRUP
+ *
+ * router.push(`/groups/${groupId}`)
+ */
 function goToGroup(groupId) {
   console.log("Anar a grup:", groupId);
-  // Més endavant:
-  // router.push(`/groups/${groupId}`)
 }
 
-/* Botó temporal per provar rols */
-function toggleRoleForTesting() {
-  isStudent.value = !isStudent.value;
-  closeSidePanels();
+/**
+ * 💬 XATS
+ *
+ * Més endavant:
+ * - Obrir WebSocket
+ * - Subscriure's a sala
+ * - Rebre missatges en temps real
+ */
+function openChat(chatId) {
+  selectedChatId.value = chatId;
+
+  // 🔌 Aquí podríem fer:
+  // await api.get(`/chats/${chatId}/messages`)
+}
+
+function closeChatConversation() {
+  selectedChatId.value = null;
 }
 </script>

@@ -63,6 +63,15 @@ function emitToggleProfile() {
 }
 
 function emitLogout() {
+  /**
+   * 🔐 BACKEND:
+   * El pare (MoodleHomePage) rebrà aquest event
+   * i farà:
+   *
+   *  - POST /auth/logout
+   *  - localStorage.removeItem("token")
+   *  - router.push("/auth/login")
+   */
   emit("logout");
 }
 </script>

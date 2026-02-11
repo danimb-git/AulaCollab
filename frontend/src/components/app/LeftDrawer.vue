@@ -54,10 +54,30 @@ defineProps({
 const emit = defineEmits(["go-class", "go-group"]);
 
 function emitGoClass(classId) {
+  /**
+   * 📡 BACKEND:
+   * Això només envia l'id al pare.
+   * El pare farà:
+   *
+   * router.push(`/classes/${classId}`)
+   *
+   * I la pàgina ClassDetail farà:
+   * GET /classes/:id
+   */
   emit("go-class", classId);
 }
 
 function emitGoGroup(groupId) {
+  /**
+   * 📡 BACKEND:
+   * Això només envia l'id al pare.
+   * El pare farà:
+   *
+   * router.push(`/groups/${groupId}`)
+   *
+   * I la pàgina GroupDetail farà:
+   * GET /groups/:id
+   */
   emit("go-group", groupId);
 }
 </script>
