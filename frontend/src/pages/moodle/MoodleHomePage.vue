@@ -54,7 +54,7 @@
             <h3 class="title">Classes</h3>
 
             <!-- Només professor pot crear classe -->
-            <button v-if="!isStudent" class="create-btn">
+            <button v-if="!isStudent" class="create-btn" @click="goToCreateClass">
               Crear una classe (+)
             </button>
           </div>
@@ -77,7 +77,7 @@
         <section v-if="isStudent">
           <div class="section-header">
             <h3 class="title">Grups d’estudi</h3>
-            <button class="create-btn">Crear un grup d’estudi (+)</button>
+            <button class="create-btn" @click="goToCreateGroup">Crear un grup d’estudi (+)</button>
           </div>
 
           <div class="cards">
@@ -136,7 +136,7 @@ const router = useRouter();
    ========================================================= */
 
 /**
- * 🔌 BACKEND:
+ * BACKEND:
  * Aquí NO haurien de ser arrays fixos.
  *
  * Aquí faríem:
@@ -179,7 +179,7 @@ const selectedChatId = ref(null);
    ========================================================= */
 
 /**
- * 🔐 BACKEND:
+ * BACKEND:
  * El rol real (alumne/professor) vindrà del login.
  *
  * Per exemple:
@@ -216,8 +216,13 @@ function onClickProfile() {
   isProfileMenuOpen.value = !isProfileMenuOpen.value;
 }
 
+function toggleRoleForTesting() {
+  isStudent.value = !isStudent.value;
+  closeSidePanels();
+}
+
 /**
- * 🔐 BACKEND LOGOUT:
+ * BACKEND LOGOUT:
  * Aquí aniria:
  *
  * 1. Petició POST /auth/logout
@@ -229,7 +234,7 @@ function onLogout() {
 }
 
 /**
- * 📡 NAVEGACIÓ A CLASSE
+ * NAVEGACIÓ A CLASSE
  *
  * Més endavant:
  *   router.push(`/classes/${classId}`)
@@ -248,6 +253,14 @@ function goToClass(classId) {
  */
 function goToGroup(groupId) {
   console.log("Anar a grup:", groupId);
+}
+
+function goToCreateClass() {
+  router.push("/moodle/classes/create");
+}
+
+function goToCreateGroup() {
+  router.push("/moodle/groups/create");
 }
 
 /**
