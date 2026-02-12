@@ -24,7 +24,7 @@
           Tornar a pàgina d'inici
         </button>
 
-        <PrimaryButton @click="onSubmit">Crear</PrimaryButton>
+        <PrimaryButton type="submit">Crear</PrimaryButton>
       </div>
 
       <p v-if="error" class="auth-error">{{ error }}</p>
@@ -42,6 +42,7 @@
 <script setup>
 import { ref } from "vue";
 import { useRouter } from "vue-router";
+import { createClass } from "../../services/api";
 
 import AuthTitle from "../../components/ui/AuthTitle.vue";
 import FormField from "../../components/ui/FormField.vue";
@@ -52,6 +53,7 @@ const router = useRouter();
 const name = ref("");
 const description = ref("");
 const error = ref("");
+const loading = ref(false);
 
 function goBack() {
   router.push("/moodle");
@@ -65,13 +67,22 @@ async function onSubmit() {
     return;
   }
 
-  // await api.post("/classes", { name: name.value, description: description.value })
-
-  console.log("Crear classe (mock):", {
-    name: name.value,
-    description: description.value,
-  });
-
-  router.push("/moodle");
+  loading.value = true;
+  try {
+    const payload = {
+      nom: name.value.trim(),
+      descripcio: description.value.trim() || null,
+    };
+    console.log("📝 Form submitted. Creating class with payload:", payload);
+    await createClass(payload);
+    console.log("✅ Class created successfully. Redirecting to /moodle");
+    // Si tot ok, tornar a home
+    await router.push("/moodle");
+  } catch (e) {
+    error.value = e.message || "Error al crear la classe";
+    console.error("❌ Error creating class:", e);
+  } finally {
+    loading.value = false;
+  }
 }
 </script>

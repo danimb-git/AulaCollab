@@ -165,30 +165,64 @@ async function deleteGroup(req, res) {
 /**
  * POST /api/groups/:id/members
  * Body d'exemple:
+ * { "emails": ["alumne1@example.com", "alumne2@example.com"] }
+ * o individual:
  * { "email": "alumne@example.com" }
- * o bé
- * { "userId": "<uuid>" }
  */
 async function addMember(req, res) {
   try {
     const groupId = req.params.id;
-    const { email, userId, memberRole } = req.body || {};
+    const { email, emails, userId, memberRole } = req.body || {};
 
-    if (
-      (email === undefined || email === null || String(email).trim() === "") &&
-      (userId === undefined || userId === null || String(userId).trim() === "")
-    ) {
+    // Support both single email and array of emails
+    let emailsList = [];
+    if (Array.isArray(emails) && emails.length > 0) {
+      emailsList = emails.filter(e => typeof e === "string" && e.trim() !== "");
+    } else if (typeof email === "string" && email.trim() !== "") {
+      emailsList = [email];
+    }
+
+    if (emailsList.length === 0 && (!userId || String(userId).trim() === "")) {
       return res.status(400).json({
         ok: false,
-        error: "Either 'email' or 'userId' must be provided",
+        error: "Either 'emails' array, 'email' string, or 'userId' must be provided",
       });
     }
 
+    // If emails provided, add each one
+    if (emailsList.length > 0) {
+      const results = [];
+      for (const targetEmail of emailsList) {
+        const result = await groupsService.addMember({
+          groupId,
+          user: req.user,
+          targetEmail,
+          targetUserId: undefined,
+          memberRole:
+            typeof memberRole === "string" && memberRole.trim()
+              ? memberRole.trim()
+              : undefined,
+        });
+        results.push(result);
+      }
+
+      // Check if any failed
+      const failures = results.filter(r => !r.ok);
+      if (failures.length > 0) {
+        return res.status(400).json({
+          ok: false,
+          error: `Failed to add some members: ${failures.map(f => f.error).join("; ")}`,
+        });
+      }
+
+      return res.json({ ok: true, data: results.map(r => r.data) });
+    }
+
+    // Otherwise use userId
     const result = await groupsService.addMember({
       groupId,
       user: req.user,
-      targetEmail:
-        typeof email === "string" && email.trim() ? email : undefined,
+      targetEmail: undefined,
       targetUserId:
         typeof userId === "string" && userId.trim() ? userId : undefined,
       memberRole:

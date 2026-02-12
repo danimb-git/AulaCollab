@@ -35,3 +35,98 @@ export async function apiRequest(path, options = {}) {
 
   return data;
 }
+
+/* ============================================
+   CLASS ENDPOINTS
+   ============================================ */
+
+export async function getClasses() {
+  const res = await apiRequest("/classes", { method: "GET" });
+  return res.data || [];
+}
+
+export async function createClass(payload) {
+  console.log("📤 Creating class with payload:", payload);
+  const res = await apiRequest("/classes", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  console.log("✅ Class created:", res);
+  return res.data;
+}
+
+export async function getClassById(classId) {
+  console.log("📡 Fetching class details for ID:", classId);
+  const res = await apiRequest(`/classes/${classId}`, { method: "GET" });
+  console.log("✅ Class data loaded:", res);
+  return res.data;
+}
+
+export async function addMemberToClass(classId, emails) {
+  console.log("📤 Adding members to class:", { classId, emails });
+  const res = await apiRequest(`/classes/${classId}/members`, {
+    method: "POST",
+    body: JSON.stringify({ emails }),
+  });
+  console.log("✅ Members added:", res);
+  return res.data;
+}
+
+/* ============================================
+   GROUP ENDPOINTS
+   ============================================ */
+
+export async function getGroups() {
+  const res = await apiRequest("/groups", { method: "GET" });
+  return res.data || [];
+}
+
+export async function createGroup(payload) {
+  console.log("📤 Creating group with payload:", payload);
+  const res = await apiRequest("/groups", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  console.log("✅ Group created:", res);
+  return res.data;
+}
+
+export async function getGroupById(groupId) {
+  console.log("📡 Fetching group details for ID:", groupId);
+  const res = await apiRequest(`/groups/${groupId}`, { method: "GET" });
+  console.log("✅ Full group response from API:", JSON.stringify(res, null, 2));
+  return res.data;
+}
+
+export async function addMemberToGroup(groupId, emails) {
+  console.log("📤 Adding members to group:", { groupId, emails });
+  const res = await apiRequest(`/groups/${groupId}/members`, {
+    method: "POST",
+    body: JSON.stringify({ emails }),
+  });
+  console.log("✅ Members added to group:", res);
+  return res.data;
+}
+
+/* ============================================
+   JWT DECODING (basic)
+   ============================================ */
+
+export function decodeJWT(token) {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1]));
+    return payload;
+  } catch (e) {
+    return null;
+  }
+}
+
+export function getCurrentUser() {
+  const token = localStorage.getItem("accessToken");
+  if (!token) return null;
+  const decoded = decodeJWT(token);
+  console.log("🔐 Decoded JWT:", decoded);
+  return decoded;
+}

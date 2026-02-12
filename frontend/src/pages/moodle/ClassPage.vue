@@ -12,7 +12,7 @@
     <!-- TÍTOL -->
     <h1 class="pageTitle">
       <!-- Wireframe: si ets prof posa "CLASSE X - VISTA DE PROFESSOR" -->
-      {{ isTeacher ? `CLASSE ${classNumber} - VISTA DE PROFESSOR` : `CLASSE ${classNumber}` }}
+      {{ isTeacher ? `CLASSE ${classData?.nom || "..."} - VISTA DE PROFESSOR` : `CLASSE ${classData?.nom || "..."}` }}
     </h1>
 
     <!-- BANNER BOTONS (1 o 2 segons rol) -->
@@ -37,7 +37,7 @@
     <section class="classDescription">
       <h2 class="subtitle">Descripció</h2>
       <p class="descText">
-        {{ classDescription }}
+        {{ classData?.descripcio || "No hi ha descripció" }}
       </p>
     </section>
 
@@ -81,12 +81,11 @@
       </div>
     </section>
 
-    <!-- ✅ PETIT “DEV TOGGLE” per provar rols fàcilment (treu-ho quan connectis backend) -->
-    <section class="devBox">
-      <label class="devLabel">
-        <input type="checkbox" v-model="isTeacher" />
-        Dev: sóc professor (toggle)
-      </label>
+    <!-- Botó: Tornar -->
+    <section style="text-align: center; margin-top: 40px; margin-bottom: 20px">
+      <button class="auth-link" type="button" @click="goBack">
+        ← Tornar al llistat
+      </button>
     </section>
   </main>
 
@@ -106,12 +105,12 @@
   <!-- MODAL: AFEGIR ALUMNE (només professor) -->
   <AppModal v-if="showAddStudentModal" @close="closeAddStudent">
     <div class="addStudentModal">
-      <h3 class="modalTitle">Afegir alumne</h3>
+      <h3 class="modalTitle">Afegir alumne per email</h3>
 
       <FormField
         label="Correu electrònic"
         v-model="newStudentEmail"
-        placeholder="exemple@exemple.exemple"
+        placeholder="alumne@exemple.com"
       />
 
       <div class="modalActions">
@@ -152,6 +151,7 @@
 <script setup>
 import { ref, computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { getClassById, addMemberToClass, getCurrentUser } from "../../services/api";
 
 import TopBar from "../../components/app/TopBar.vue";
 import AppModal from "../../components/ui/AppModal.vue";
@@ -167,25 +167,22 @@ const route = useRoute();
 const router = useRouter();
 
 /* =========================================================
-   A) ESTAT (mock fins connectar backend)
+   A) ESTAT (real data + mock fins connectar backends)
    ========================================================= */
 
-const classId = computed(() => route.params.classId);
+const classId = computed(() => route.params.id);
+const classData = ref(null);
+const loading = ref(true);
+const error = ref("");
 
-// Per fer que al títol surti "CLASSE 1" com al wireframe
-const classNumber = computed(() => {
-  // si classId és "1" -> 1, si és uuid -> posa 1 per defecte
-  const n = Number(classId.value);
-  return Number.isFinite(n) ? n : 1;
+// Determinar si és el propietari de la classe
+const isTeacher = computed(() => {
+  if (!classData.value) return false;
+  const user = getCurrentUser();
+  if (!user) return false;
+  // Verificar si és el propietari (professor)
+  return classData.value.professor_id === user.sub;
 });
-
-// ✅ Dev role toggle (després vindrà del login/JWT)
-const isTeacher = ref(false);
-
-// Text descripció
-const classDescription = ref(
-  "Descripció de la classe Descripció de la classe Descripció de la classe Descripció de la classe..."
-);
 
 // Alumnes
 const students = ref([
@@ -239,6 +236,35 @@ function handleLogout() {
   router.push("/auth/login");
 }
 
+/**
+ * Extreu el rol del JWT i determina si és professor
+ */
+function loadUserRole() {
+  const user = getCurrentUser();
+  if (user && classData.value) {
+    // Es professor si és owner de la classe o si és ADMIN
+    isTeacher.value = user.id === classData.value.professor_id || user.rol === "ADMIN";
+  }
+}
+
+/**
+ * Carrega els detalls de la classe des del backend
+ */
+async function loadClassDetail() {
+  loading.value = true;
+  error.value = "";
+  try {
+    console.log("📡 Fetching class details for ID:", classId.value);
+    classData.value = await getClassById(classId.value);
+    console.log("✅ Class data loaded, checking role...");
+    // El rol s'actualitza automàticament via computed
+  } catch (e) {
+    error.value = e.message || "Error al caregar la classe";
+    console.error("❌ Error loading class:", error.value);
+  } finally {
+    loading.value = false;
+  }
+}
 
 /* =========================================================
    C) MODALS (llistat alumnes / afegir alumne / chat)
@@ -268,18 +294,30 @@ function closeAddStudent() {
 function submitAddStudent() {
   if (!newStudentEmail.value.trim()) return;
 
-  // ✅ BACKEND:
-  // POST /classes/:id/members  { email: newStudentEmail }
-  // Si tot ok -> refrescar llista d'alumnes
-  console.log("Afegir alumne:", newStudentEmail.value);
-
-  // Mock: afegim a la llista perquè es vegi
-  students.value.push({
-    id: Date.now(),
-    name: newStudentEmail.value,
-  });
-
+  // Afegir membre a la classe via API
+  console.log("📝 Adding student:", newStudentEmail.value);
+  addStudentByEmail(newStudentEmail.value.trim());
   closeAddStudent();
+}
+
+/**
+ * Afegir alumne per email (connectat a backend)
+ */
+async function addStudentByEmail(email) {
+  try {
+    console.log("📤 Calling API to add member:", email);
+    const result = await addMemberToClass(classId.value, [email]);
+    console.log("✅ Member added successfully:", result);
+    
+    // Actualitzar la llista d'alumnes (mock per ara)
+    students.value.push({
+      id: Date.now(),
+      name: email,
+    });
+  } catch (e) {
+    console.error("❌ Error adding member:", e);
+    alert("Error al afegir l'alumne: " + (e.message || "Error desconegut"));
+  }
 }
 
 /* =========================================================
@@ -342,14 +380,19 @@ function handleVideoCall() {
 }
 
 /* =========================================================
+   G) NAVEGACIÓ
+   ========================================================= */
+
+function goBack() {
+  router.push("/moodle");
+}
+
+/* =========================================================
    G) ONMOUNTED: carregar dades reals
    ========================================================= */
 
 onMounted(() => {
-  // ✅ BACKEND:
-  // GET /classes/:id  -> nom, descripció
-  // GET /classes/:id/files
-  // GET /classes/:id/students
-  // I el rol real vindrà del token del login (JWT)
+  // Carrega els detalls de la classe
+  loadClassDetail();
 });
 </script>
