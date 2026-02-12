@@ -229,9 +229,11 @@ function toggleRoleForTesting() {
  * 2. Esborrar token del localStorage
  * 3. Redirigir a /auth/login
  */
-function onLogout() {
+ function onLogout() {
+  localStorage.removeItem("accessToken");
   router.push("/auth/login");
 }
+
 
 /**
  * NAVEGACIÓ A CLASSE

@@ -235,12 +235,10 @@ function toggleProfile() {
 }
 
 function handleLogout() {
-  // ✅ BACKEND:
-  // - esborrar token de localStorage
-  // - cridar POST /auth/logout (si ho teniu)
-  // - redirigir a /auth/login
+  localStorage.removeItem("accessToken");
   router.push("/auth/login");
 }
+
 
 /* =========================================================
    C) MODALS (llistat alumnes / afegir alumne / chat)
