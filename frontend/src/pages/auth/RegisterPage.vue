@@ -55,6 +55,7 @@
       </div>
 
       <div class="auth-actions">
+
         <RouterLink class="auth-link" to="/auth/login">
           Tornar a inici de sessió
         </RouterLink>
@@ -63,6 +64,7 @@
           Entrar
         </PrimaryButton>
       </div>
+      <p v-if="error" class="auth-error">{{ error }}</p>
     </div>
   </div>
 </template>
@@ -73,6 +75,8 @@ import { ref } from "vue";
 import AuthTitle from "../../components/ui/AuthTitle.vue";
 import FormField from "../../components/ui/FormField.vue";
 import PrimaryButton from "../../components/ui/PrimaryButton.vue";
+import { apiRequest } from "../../services/api.js";
+import { useRouter }  from "vue-router";
 
 const name = ref("");
 const surname = ref("");
@@ -80,15 +84,46 @@ const email = ref("");
 const password = ref("");
 const isTeacher = ref(false);
 const teacherSecret = ref("");
+const router = useRouter()
+const error = ref("")
+const loading = ref(false)
 
-function onRegister() {
-  console.log("REGISTER", {
-    name: name.value,
-    surname: surname.value,
-    email: email.value,
+async function onRegister() {
+  error.value = "";
+
+  if (!name.value.trim() || !surname.value.trim() || !email.value.trim() || !password.value.trim()) {
+    error.value = "Omple tots els camps obligatoris.";
+    return;
+  }
+
+  if (isTeacher.value && !teacherSecret.value.trim()) {
+    error.value = "Si ets professor, cal introduir el PIN.";
+    return;
+  }
+
+  const payload = {
+    nom: name.value.trim(),
+    cognom: surname.value.trim(),
+    email: email.value.trim(),
     password: password.value,
     isTeacher: isTeacher.value,
-    teacherSecret: teacherSecret.value,
-  });
+    teacherPin: isTeacher.value ? teacherSecret.value.trim() : undefined,
+  };
+
+  try {
+    loading.value = true;
+
+    await apiRequest("/auth/register", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+
+    router.push("/auth/login");
+  } catch (e) {
+    error.value = e.message || "No s'ha pogut crear el compte.";
+  } finally {
+    loading.value = false;
+  }
 }
+
 </script>
