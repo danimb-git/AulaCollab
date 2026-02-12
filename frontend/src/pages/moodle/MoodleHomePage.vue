@@ -105,14 +105,6 @@
         </section>
       </div>
     </main>
-
-    <!-- 7) BOTÓ TEMPORAL PER PROVAR (després s'elimina)
-         Serveix per veure la diferència ALUMNE/PROFESSOR sense backend. -->
-    <div style="position: fixed; left: 20px; bottom: 20px">
-      <button class="create-btn" @click="toggleRoleForTesting">
-        Mode: {{ isStudent ? "ALUMNE" : "PROFESSOR" }}
-      </button>
-    </div>
   </div>
 </template>
 
@@ -132,9 +124,9 @@
  *  - Els xats vindran de GET /chats o via WebSocket
  */
 
-import { ref, onMounted, onActivated } from "vue";
+import { ref, onMounted, computed  } from "vue";
 import { useRouter } from "vue-router";
-import { getClasses, getGroups, getCurrentUser } from "../../services/api";
+import { apiRequest } from "../../services/api.js";
 
 import TopBar from "../../components/app/TopBar.vue";
 import LeftDrawer from "../../components/app/LeftDrawer.vue";
@@ -207,6 +199,9 @@ function loadUserRole() {
     isStudent.value = user.role === "ALUMNE";
   }
 }
+  const role = ref(null);
+  const isStudent = computed(() => role.value === "ALUMNE");
+
 
 /* =========================================================
    D) FUNCIONS
@@ -235,10 +230,7 @@ function onClickProfile() {
   isProfileMenuOpen.value = !isProfileMenuOpen.value;
 }
 
-function toggleRoleForTesting() {
-  isStudent.value = !isStudent.value;
-  closeSidePanels();
-}
+
 
 /**
  * BACKEND LOGOUT:
@@ -260,6 +252,18 @@ function toggleRoleForTesting() {
 function goToClass(classId) {
   router.push(`/classes/${classId}`);
 }
+
+
+onMounted(async () => {
+  try {
+    const me = await apiRequest("/me");
+    role.value = me.role; // ALUMNE | PROFESSOR | ADMIN
+  } catch (e) {
+    localStorage.removeItem("accessToken");
+    router.push("/auth/login");
+  }
+});
+
 
 /**
  * 📡 NAVEGACIÓ A GRUP
