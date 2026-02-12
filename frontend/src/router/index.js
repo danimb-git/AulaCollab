@@ -11,7 +11,7 @@ const routes = [
   { path: "/", redirect: "/auth/login" },
 
   { path: "/auth/login",
-    nome: "login",
+    name: "login",
     component: LoginPage,
     meta: { guestOnly:true }, 
   },
@@ -41,9 +41,15 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    path: "/classes/:classId",
+    path: "/classes/:id",
     name: "class",
     component: () => import("../pages/moodle/ClassPage.vue"),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/groups/:id",
+    name: "group",
+    component: () => import("../pages/moodle/GroupPage.vue"),
     meta: { requiresAuth: true },
   },
 ];

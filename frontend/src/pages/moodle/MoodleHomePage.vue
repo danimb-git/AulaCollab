@@ -20,8 +20,8 @@
     <!-- 3) MENÚ LATERAL ESQUERRE (classes i grups) -->
     <LeftDrawer
       v-if="leftMenuOpen"
-      :classes="mockClasses"
-      :groups="mockGroups"
+      :classes="classes"
+      :groups="groups"
       :showGroups="isStudent"
       @go-class="goToClass"
       @go-group="goToGroup"
@@ -40,6 +40,16 @@
     <h1 class="moodle-title">
       {{ isStudent ? "MOODLE" : "MOODLE - PROFESSORS" }}
     </h1>
+
+    <!-- Loading indicator -->
+    <div v-if="loading" style="text-align: center; padding: 20px; color: #999;">
+      Carregant dades...
+    </div>
+
+    <!-- Error indicator -->
+    <div v-if="error" style="text-align: center; padding: 20px; color: red;">
+      ⚠️ {{ error }}
+    </div>
 
     <!-- 6) CONTINGUT CENTRAL (cards) -->
     <main class="main">
@@ -61,13 +71,13 @@
 
           <div class="cards">
             <div
-              v-for="c in mockClasses"
+              v-for="c in classes"
               :key="c.id"
               class="card"
               @click="goToClass(c.id)"
             >
               <div class="card-thumb"></div>
-              <p class="card-name">{{ c.name }}</p>
+              <p class="card-name">{{ c.nom }}</p>
               <div class="card-arrow">→</div>
             </div>
           </div>
@@ -82,13 +92,13 @@
 
           <div class="cards">
             <div
-              v-for="g in mockGroups"
+              v-for="g in groups"
               :key="g.id"
               class="card"
               @click="goToGroup(g.id)"
             >
               <div class="card-thumb"></div>
-              <p class="card-name">{{ g.name }}</p>
+              <p class="card-name">{{ g.nom }}</p>
               <div class="card-arrow">→</div>
             </div>
           </div>
@@ -122,8 +132,9 @@
  *  - Els xats vindran de GET /chats o via WebSocket
  */
 
-import { ref, onMounted } from "vue";
+import { ref, onMounted, onActivated } from "vue";
 import { useRouter } from "vue-router";
+import { getClasses, getGroups, getCurrentUser } from "../../services/api";
 
 import TopBar from "../../components/app/TopBar.vue";
 import LeftDrawer from "../../components/app/LeftDrawer.vue";
@@ -159,6 +170,11 @@ const mockGroups = ref([
   { id: 1, name: "Grup d’estudi 1" },
   { id: 2, name: "Grup d’estudi 2" },
 ]);
+// Data real del backend
+const classes = ref([]);
+const groups = ref([]);
+const loading = ref(false);
+const error = ref("");
 
 const mockChats = ref([
   { id: 1, name: "Usuari 1" },
@@ -175,19 +191,22 @@ const isProfileMenuOpen = ref(false);
 const selectedChatId = ref(null);
 
 /* =========================================================
-   C) ROL (més endavant vindrà del token JWT)
+   C) ROL (extret del JWT)
    ========================================================= */
 
-/**
- * BACKEND:
- * El rol real (alumne/professor) vindrà del login.
- *
- * Per exemple:
- *  const user = decodeJWT(token)
- *  isStudent.value = user.role === "STUDENT"
- */
-
 const isStudent = ref(true);
+
+/**
+ * Extreu el rol del JWT token
+ */
+function loadUserRole() {
+  const user = getCurrentUser();
+  if (user) {
+    // Backend usa "role" en JWT (ALUMNE, PROFESSOR, ADMIN)
+    console.log("👤 User role from JWT:", user.role);
+    isStudent.value = user.role === "ALUMNE";
+  }
+}
 
 /* =========================================================
    D) FUNCIONS
@@ -237,24 +256,17 @@ function toggleRoleForTesting() {
 
 /**
  * NAVEGACIÓ A CLASSE
- *
- * Més endavant:
- *   router.push(`/classes/${classId}`)
- *
- * I la pàgina ClassDetail faria:
- *   GET /classes/:id
  */
 function goToClass(classId) {
-  console.log("Anar a classe:", classId);
+  router.push(`/classes/${classId}`);
 }
 
 /**
  * 📡 NAVEGACIÓ A GRUP
- *
- * router.push(`/groups/${groupId}`)
  */
 function goToGroup(groupId) {
-  console.log("Anar a grup:", groupId);
+  console.log("🔗 Navigating to group:", groupId);
+  router.push(`/groups/${groupId}`);
 }
 
 function goToCreateClass() {
@@ -283,4 +295,42 @@ function openChat(chatId) {
 function closeChatConversation() {
   selectedChatId.value = null;
 }
+
+/**
+ * Carrega dades reals del backend
+ */
+async function loadData() {
+  loading.value = true;
+  error.value = "";
+  try {
+    console.log("📡 Fetching classes and groups from API...");
+    const [classesData, groupsData] = await Promise.all([
+      getClasses(),
+      getGroups().catch((err) => {
+        console.warn("⚠️ Groups fetch failed (might be normal for professors):", err.message);
+        return [];
+      })
+    ]);
+    console.log("✅ Classes loaded:", classesData);
+    console.log("✅ Groups loaded:", groupsData);
+    classes.value = classesData;
+    groups.value = groupsData;
+  } catch (e) {
+    error.value = e.message || "Error al caregar dades";
+    console.error("❌ Error loading data:", error.value);
+  } finally {
+    loading.value = false;
+  }
+}
+
+// Carrega dades al muntar i quan tornem a la pàgina (refresh)
+onMounted(() => {
+  loadUserRole();
+  loadData();
+});
+
+onActivated(() => {
+  // Refrescar quando tornem a aquesta pàgina (ex: després de crear classe)
+  loadData();
+});
 </script>

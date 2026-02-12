@@ -15,7 +15,7 @@
           Tornar a pàgina d'inici
         </button>
 
-        <PrimaryButton @click="onSubmit">Crear</PrimaryButton>
+        <PrimaryButton type="submit">Crear</PrimaryButton>
       </div>
 
       <p v-if="error" class="auth-error">{{ error }}</p>
@@ -33,6 +33,7 @@
 <script setup>
 import { ref } from "vue";
 import { useRouter } from "vue-router";
+import { createGroup } from "../../services/api";
 
 import AuthTitle from "../../components/ui/AuthTitle.vue";
 import FormField from "../../components/ui/FormField.vue";
@@ -42,6 +43,7 @@ const router = useRouter();
 
 const name = ref("");
 const error = ref("");
+const loading = ref(false);
 
 function goBack() {
   router.push("/moodle");
@@ -55,10 +57,21 @@ async function onSubmit() {
     return;
   }
 
-  // await api.post("/groups", { name: name.value })
-
-  console.log("Crear grup (mock):", name.value);
-
-  router.push("/moodle");
+  loading.value = true;
+  try {
+    const payload = {
+      nom: name.value.trim(),
+    };
+    console.log("📝 Group form submitted. Creating group with payload:", payload);
+    await createGroup(payload);
+    console.log("✅ Group created successfully. Redirecting to /moodle");
+    // Si tot ok, tornar a home
+    await router.push("/moodle");
+  } catch (e) {
+    error.value = e.message || "Error al crear el grup";
+    console.error("❌ Error creating group:", e);
+  } finally {
+    loading.value = false;
+  }
 }
 </script>
