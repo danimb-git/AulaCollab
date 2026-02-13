@@ -15,13 +15,14 @@
 
       <!-- Botó perfil -->
       <button class="profile-btn" @click="emitToggleProfile">
-        <span class="profile-text">Perfil</span>
+        <span class="profile-text">{{ displayName }}</span>
         <span class="profile-avatar"></span>
       </button>
     </div>
 
-    <!-- Dropdown del perfil (només es veu si isProfileOpen = true) -->
-    <div v-if="isProfileOpen" class="profile-menu">
+    <!-- Dropdown del perfil (només es veu si el flag global o la prop està oberta) -->
+    <div v-if="(isProfileOpen || showProfileDropdown) || profileMenuOpen" class="profile-menu">
+      <div class="profile-item">{{ displayName }}</div>
       <button @click="emitLogout">Tancar sessió</button>
     </div>
   </header>
@@ -41,6 +42,14 @@
 defineProps({
   // El pare li diu si el menú de perfil està obert o no
   isProfileOpen: { type: Boolean, default: false },
+  // Compatibilitat amb altres pàgines que passen aquest prop amb un altre nom
+  showProfileDropdown: { type: Boolean, default: undefined },
+  // Opcional: passar handlers com a props en lloc de escoltar events
+  onToggleLeft: { type: Function, default: undefined },
+  onToggleChat: { type: Function, default: undefined },
+  // alias used in some pages
+  onToggleRight: { type: Function, default: undefined },
+  onToggleProfile: { type: Function, default: undefined },
 });
 
 const emit = defineEmits([
@@ -50,15 +59,33 @@ const emit = defineEmits([
   "logout",
 ]);
 
+import { getCurrentUser } from "../../services/api";
+import { computed } from "vue";
+import { toggleLeft, toggleChat, toggleProfile, profileMenuOpen } from "../../composables/useShell";
+
+const user = getCurrentUser();
+const displayName = computed(() => {
+  if (!user) return "Perfil";
+  const first = user.nom || user.firstName || "";
+  const last = user.cognom || user.lastName || "";
+  const combined = `${first} ${last}`.trim();
+  return combined || user.email || "Perfil";
+});
+
 function emitToggleLeft() {
+  // Toggle global left drawer
+  toggleLeft();
   emit("toggle-left");
 }
 
 function emitToggleChat() {
+  // Toggle global chat drawer
+  toggleChat();
   emit("toggle-chat");
 }
 
 function emitToggleProfile() {
+  toggleProfile();
   emit("toggle-profile");
 }
 
@@ -75,3 +102,32 @@ function emitLogout() {
   emit("logout");
 }
 </script>
+
+<style scoped>
+.profile-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  max-width: 320px; /* reasonable cap */
+}
+.profile-text {
+  display: inline-block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+.profile-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #ccc;
+}
+.profile-menu { position: absolute; right: 12px; top: 56px; background: white; border: 1px solid #ddd; padding: 8px; border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,0.08); }
+.profile-item { font-weight: 600; margin-bottom: 6px; }
+</style>

@@ -1,40 +1,9 @@
 <template>
   <div class="app-shell">
     <!-- 1) BARRA SUPERIOR (sempre visible) -->
-    <TopBar
-      :isProfileOpen="isProfileMenuOpen"
-      @toggle-left="onClickHamburger"
-      @toggle-chat="onClickChatIcon"
-      @toggle-profile="onClickProfile"
-      @logout="onLogout"
-    />
+    <TopBar @logout="onLogout" />
 
-    <!-- 2) OVERLAY: quan hi ha algun menú lateral obert, fem fons semi-transparent.
-         Si cliques fora, es tanca tot. -->
-    <div
-      v-if="leftMenuOpen || chatMenuOpen"
-      class="overlay"
-      @click="closeSidePanels"
-    ></div>
-
-    <!-- 3) MENÚ LATERAL ESQUERRE (classes i grups) -->
-    <LeftDrawer
-      v-if="leftMenuOpen"
-      :classes="classes"
-      :groups="groups"
-      :showGroups="isStudent"
-      @go-class="goToClass"
-      @go-group="goToGroup"
-    />
-
-    <!-- 4) MENÚ LATERAL DRET (xats) -->
-    <RightChatDrawer
-      v-if="chatMenuOpen"
-      :chats="mockChats"
-      :selectedChatId="selectedChatId"
-      @select-chat="openChat"
-      @back="closeChatConversation"
-    />
+    <!-- Drawers are rendered globally in App.vue via shared shell state -->
 
     <!-- 5) TÍTOL CENTRAL -->
     <h1 class="moodle-title">
@@ -137,8 +106,6 @@ import { useRouter } from "vue-router";
 import { getClasses, getGroups, getCurrentUser } from "../../services/api";
 
 import TopBar from "../../components/app/TopBar.vue";
-import LeftDrawer from "../../components/app/LeftDrawer.vue";
-import RightChatDrawer from "../../components/app/RightChatDrawer.vue";
 
 const router = useRouter();
 
@@ -182,17 +149,8 @@ const mockChats = ref([
 ]);
 
 /* =========================================================
-   B) ESTAT UI
-   ========================================================= */
-
-const leftMenuOpen = ref(false);
-const chatMenuOpen = ref(false);
-const isProfileMenuOpen = ref(false);
-const selectedChatId = ref(null);
-
-/* =========================================================
-   C) ROL (extret del JWT)
-   ========================================================= */
+  B) ROL (extret del JWT)
+  ========================================================= */
 
 const isStudent = ref(true);
 
@@ -212,32 +170,8 @@ function loadUserRole() {
    D) FUNCIONS
    ========================================================= */
 
-function closeSidePanels() {
-  leftMenuOpen.value = false;
-  chatMenuOpen.value = false;
-  isProfileMenuOpen.value = false;
-  selectedChatId.value = null;
-}
-
-function onClickHamburger() {
-  leftMenuOpen.value = !leftMenuOpen.value;
-  chatMenuOpen.value = false;
-  isProfileMenuOpen.value = false;
-}
-
-function onClickChatIcon() {
-  chatMenuOpen.value = !chatMenuOpen.value;
-  leftMenuOpen.value = false;
-  isProfileMenuOpen.value = false;
-}
-
-function onClickProfile() {
-  isProfileMenuOpen.value = !isProfileMenuOpen.value;
-}
-
 function toggleRoleForTesting() {
   isStudent.value = !isStudent.value;
-  closeSidePanels();
 }
 
 /**

@@ -63,8 +63,8 @@
           class="fileRow"
           @click="downloadFile(f)"
         >
-          <span class="fileName">{{ f.name }}</span>
-          <span class="fileDate">{{ f.date }}</span>
+          <span class="fileName">{{ f.nom || f.name || f.originalname || f.filename }}</span>
+          <span class="fileDate">{{ f.created_at ? new Date(f.created_at).toLocaleString() : (f.date || '') }}</span>
         </div>
       </div>
 
@@ -146,12 +146,15 @@
       </div>
     </div>
   </AppModal>
+
+  <!-- hidden file input -->
+  <input ref="fileInput" type="file" style="display:none" @change="onFileSelected" />
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { getClassById, addMemberToClass, getCurrentUser } from "../../services/api";
+import { getClassById, addMemberToClass, getCurrentUser, getClassDocuments, uploadClassDocument } from "../../services/api";
 
 import TopBar from "../../components/app/TopBar.vue";
 import AppModal from "../../components/ui/AppModal.vue";
@@ -184,31 +187,12 @@ const isTeacher = computed(() => {
   return classData.value.professor_id === user.sub;
 });
 
-// Alumnes
-const students = ref([
-  { id: 1, name: "Alumne 1" },
-  { id: 2, name: "Alumne 2" },
-  { id: 3, name: "Alumne 3" },
-  { id: 4, name: "Alumne 4" },
-  { id: 5, name: "Alumne 5" },
-  { id: 6, name: "Alumne 6" },
-  { id: 7, name: "Alumne 7" },
-  { id: 8, name: "Alumne 8" },
-  { id: 9, name: "Alumne 9" },
-  { id: 10, name: "Alumne 10" },
-  { id: 11, name: "Alumne 11" },
-  { id: 12, name: "Alumne 12" },
-]);
+// Alumnes (carregats des del backend)
+const students = ref([]);
 
-// Fitxers
-const files = ref([
-  { id: 1, name: "Fitxer 1", date: "01/01/2026" },
-  { id: 2, name: "Fitxer 2", date: "02/01/2026" },
-  { id: 3, name: "Fitxer 3", date: "03/01/2026" },
-  { id: 4, name: "Fitxer 4", date: "04/01/2026" },
-  { id: 5, name: "Fitxer 5", date: "05/01/2026" },
-  { id: 6, name: "Fitxer 6", date: "06/01/2026" },
-]);
+// Fitxers (reals)
+const files = ref([]);
+const fileInput = ref(null);
 
 /* =========================================================
    B) TOPBAR (mateixes funcionalitats que MoodleHomePage)
@@ -257,13 +241,33 @@ async function loadClassDetail() {
     console.log("📡 Fetching class details for ID:", classId.value);
     classData.value = await getClassById(classId.value);
     console.log("✅ Class data loaded, checking role...");
+    // Populate students list from backend response
+    try {
+      const raw = classData.value;
+      let list = [];
+      if (raw?.class_members && Array.isArray(raw.class_members)) {
+        list = raw.class_members.map((m) => {
+          const u = m.users || m.user || {};
+          const name = u.nom || u.name || u.email || "Usuari";
+          return { id: u.id || Date.now() + Math.random(), name };
+        });
+      } else if (raw?.members && Array.isArray(raw.members)) {
+        list = raw.members.map((u) => ({ id: u.id || Date.now() + Math.random(), name: u.nom || u.name || u.email }));
+      }
+      students.value = list;
+    } catch (e) {
+      console.warn("Could not parse students from class data", e);
+      students.value = [];
+    }
     // El rol s'actualitza automàticament via computed
-  } catch (e) {
+    } catch (e) {
     error.value = e.message || "Error al caregar la classe";
     console.error("❌ Error loading class:", error.value);
   } finally {
     loading.value = false;
   }
+    // intentar carregar documents també
+    try { await loadClassDocuments(); } catch (_) {}
 }
 
 /* =========================================================
@@ -275,8 +279,8 @@ const showAddStudentModal = ref(false);
 const showChatModal = ref(false);
 
 function openStudentsList() {
-  // ✅ BACKEND:
-  // GET /classes/:id/students
+  // Carregar detalls (inclou membres) abans de mostrar
+  loadClassDetail();
   showStudentsModal.value = true;
 }
 
@@ -308,12 +312,8 @@ async function addStudentByEmail(email) {
     console.log("📤 Calling API to add member:", email);
     const result = await addMemberToClass(classId.value, [email]);
     console.log("✅ Member added successfully:", result);
-    
-    // Actualitzar la llista d'alumnes (mock per ara)
-    students.value.push({
-      id: Date.now(),
-      name: email,
-    });
+    // Recarregar detalls per mostrar els nous membres
+    await loadClassDetail();
   } catch (e) {
     console.error("❌ Error adding member:", e);
     alert("Error al afegir l'alumne: " + (e.message || "Error desconegut"));
@@ -361,13 +361,40 @@ function sendMessage() {
 function downloadFile(file) {
   // ✅ BACKEND:
   // GET /classes/:id/files/:fileId (download)
-  console.log("Download:", file);
+  if (!file || !file.id) return;
+  window.open(`${window.location.protocol}//${window.location.hostname}:3000/api/classes/${classId.value}/documents/${file.id}/download`,'_blank');
 }
 
 function handleUploadFile() {
-  // ✅ BACKEND:
-  // POST /classes/:id/files (FormData)
-  console.log("Upload file");
+  // Trigger hidden file input
+  fileInput.value && fileInput.value.click();
+}
+
+async function onFileSelected(e) {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  try {
+    await uploadClassDocument(classId.value, f);
+    // refresh documents
+    await loadClassDocuments();
+    alert('Fitxer pujat correctament');
+  } catch (err) {
+    console.error('Upload failed', err);
+    alert('Error al pujar el fitxer: ' + (err.message || 'Error'));
+  } finally {
+    // clear input
+    e.target.value = null;
+  }
+}
+
+async function loadClassDocuments() {
+  try {
+    const docs = await getClassDocuments(classId.value);
+    files.value = Array.isArray(docs) ? docs : [];
+  } catch (e) {
+    console.warn('Could not load class documents', e);
+    files.value = [];
+  }
 }
 
 /* =========================================================

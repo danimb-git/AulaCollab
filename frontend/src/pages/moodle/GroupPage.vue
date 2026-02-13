@@ -1,17 +1,11 @@
 <template>
   <!-- TOP BAR -->
-  <TopBar
-    :onToggleLeft="toggleLeft"
-    :onToggleRight="toggleRight"
-    :onToggleProfile="toggleProfile"
-    :showProfileDropdown="showProfileDropdown"
-    @logout="handleLogout"
-  />
+  <TopBar @logout="handleLogout" />
 
   <main class="page">
     <!-- TÍTOL -->
     <h1 class="pageTitle">
-      {{ groupData?.nom || "Grup de treball" }}
+      {{ isOwner ? `GRUP ${groupData?.nom || "..."} - VISTA DE PROPIETARI` : `GRUP ${groupData?.nom || "..."}` }}
     </h1>
 
     <!-- BANNER BOTONS -->
@@ -27,7 +21,7 @@
           type="button"
           @click="openAddMember"
         >
-          Afegir un membre (+)
+          Afegir un company (+)
         </PrimaryButton>
       </div>
     </section>
@@ -53,27 +47,30 @@
       </button>
     </section>
 
-    <!-- FITXERS -->
+    <!-- LLISTAT FITXERS -->
     <section class="filesSection">
-      <div class="sectionTitle">
-        <h3>Fitxers compartits</h3>
-        <button type="button" class="uploadBtn" @click="handleUploadFile">
-          📎 Pujar fitxer
-        </button>
+      <div class="filesList">
+        <div
+          v-for="f in files"
+          :key="f.id"
+          class="fileRow"
+          @click="downloadFile(f)"
+        >
+          <span class="fileName">{{ f.nom || f.name || f.originalname || f.filename }}</span>
+          <span class="fileDate">{{ f.created_at ? new Date(f.created_at).toLocaleString() : (f.date || '') }}</span>
+        </div>
       </div>
 
-      <div class="filesList">
-        <div v-for="f in files" :key="f.id" class="fileItem">
-          <span>{{ f.name }}</span>
-          <span class="fileDate">{{ f.date }}</span>
-          <button
-            type="button"
-            class="downloadBtn"
-            @click="downloadFile(f)"
-          >
-            ⬇️
-          </button>
-        </div>
+      <!-- Només propietari: botó per penjar fitxer -->
+      <div class="filesFooter">
+        <PrimaryButton
+          v-if="isOwner"
+          class="btnSmall"
+          type="button"
+          @click="handleUploadFile"
+        >
+          Penjar un nou fitxer (+)
+        </PrimaryButton>
       </div>
     </section>
 
@@ -84,6 +81,9 @@
       </button>
     </section>
   </main>
+
+  <!-- hidden file input -->
+  <input ref="fileInput" type="file" style="display:none" @change="onFileSelected" />
 
   <!-- MODAL: MEMBRES -->
   <AppModal v-if="showMembersModal" @close="closeMembersModal">
@@ -156,7 +156,7 @@
 <script setup>
 import { ref, computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { getGroupById, addMemberToGroup, getCurrentUser } from "../../services/api";
+import { getGroupById, addMemberToGroup, getCurrentUser, getGroupDocuments, uploadGroupDocument } from "../../services/api";
 
 import TopBar from "../../components/app/TopBar.vue";
 import AppModal from "../../components/ui/AppModal.vue";
@@ -172,34 +172,14 @@ const router = useRouter();
 
 const groupId = computed(() => route.params.id);
 const groupData = ref(null);
+const members = ref([]);
+const files = ref([]);
+const fileInput = ref(null);
 const loading = ref(true);
 const error = ref("");
 
 /* =========================================================
-   B) TOPBAR
-   ========================================================= */
-
-const showProfileDropdown = ref(false);
-
-function toggleLeft() {
-  console.log("toggle left drawer");
-}
-
-function toggleRight() {
-  console.log("toggle right drawer");
-}
-
-function toggleProfile() {
-  showProfileDropdown.value = !showProfileDropdown.value;
-}
-
-function handleLogout() {
-  localStorage.removeItem("accessToken");
-  router.push("/auth/login");
-}
-
-/* =========================================================
-   C) MEMBRES & MODALS
+   B) MODALS & UI STATE
    ========================================================= */
 
 const showMembersModal = ref(false);
@@ -210,14 +190,77 @@ const isOwner = computed(() => {
   if (!groupData.value) return false;
   const user = getCurrentUser();
   if (!user) return false;
-  // Verificar si és el propietari
   return groupData.value.owner_id === user.sub;
 });
 
-const members = ref([]);
+function handleLogout() {
+  localStorage.removeItem("accessToken");
+  router.push("/auth/login");
+}
+
+/**
+ * Carrega els detalls del grup des del backend
+ */
+async function loadGroupDetail() {
+  loading.value = true;
+  error.value = "";
+  try {
+    console.log("📡 Fetching group details for ID:", groupId.value);
+    const data = await getGroupById(groupId.value);
+    groupData.value = data;
+    console.log("✅ Group data loaded:", data);
+
+    // Parse members from backend
+    let membersList = [];
+    if (data.group_members && Array.isArray(data.group_members)) {
+      membersList = data.group_members.map((m) => ({
+        id: m.user_id || m.users?.id || Date.now(),
+        name: m.users?.nom 
+          ? `${m.users.nom} ${m.users.cognom || ""}`.trim() 
+          : m.users?.email || "Unknown",
+        email: m.users?.email,
+        owner: m.member_role === "OWNER"
+      }));
+    }
+    members.value = membersList;
+  } catch (e) {
+    error.value = e.message || "Error al caregar el grup";
+    console.error("❌ Error loading group:", error.value);
+  } finally {
+    loading.value = false;
+  }
+  
+  // Load documents
+  try { await loadGroupDocuments(); } catch (_) {}
+}
+
+async function loadGroupDocuments() {
+  try {
+    const docs = await getGroupDocuments(groupId.value);
+    files.value = Array.isArray(docs) ? docs : [];
+  } catch (e) {
+    console.warn("Could not load group documents", e);
+    files.value = [];
+  }
+}
+async function addMemberByEmail(email) {
+  try {
+    console.log("📤 Calling API to add member to group:", email);
+    const result = await addMemberToGroup(groupId.value, [email]);
+    console.log("✅ Member added to group successfully:", result);
+    
+    // Recarregar els membres del grup per assegurar que estan actualitzats
+    console.log("🔄 Reloading group members...");
+    await loadGroupDetail();
+    console.log("✅ Group members refreshed");
+  } catch (e) {
+    console.error("❌ Error adding member to group:", e);
+    alert("Error al afegir el company: " + (e.message || "Error desconegut"));
+  }
+}
 
 function openMembersList() {
-  console.log("📋 Showing members modal. Current members:", members.value);
+  loadGroupDetail();
   showMembersModal.value = true;
 }
 
@@ -238,30 +281,9 @@ function closeAddMember() {
 
 function submitAddMember() {
   if (!newMemberEmail.value.trim()) return;
-
-  // Afegir membre al grup via API
   console.log("📝 Adding member:", newMemberEmail.value);
   addMemberByEmail(newMemberEmail.value.trim());
   closeAddMember();
-}
-
-/**
- * Afegir company per email (connectat a backend)
- */
-async function addMemberByEmail(email) {
-  try {
-    console.log("📤 Calling API to add member to group:", email);
-    const result = await addMemberToGroup(groupId.value, [email]);
-    console.log("✅ Member added to group successfully:", result);
-    
-    // Recarregar els membres del grup per assegurar que estan actualitzats
-    console.log("🔄 Reloading group members...");
-    await loadGroupDetail();
-    console.log("✅ Group members refreshed");
-  } catch (e) {
-    console.error("❌ Error adding member to group:", e);
-    alert("Error al afegir el company: " + (e.message || "Error desconegut"));
-  }
 }
 
 function removeMember(memberId) {
@@ -270,7 +292,35 @@ function removeMember(memberId) {
 }
 
 /* =========================================================
-   D) CHAT
+   D) FITXERS
+   ========================================================= */
+
+function downloadFile(file) {
+  if (!file || !file.id) return;
+  window.open(`${window.location.protocol}//${window.location.hostname}:3000/api/groups/${groupId.value}/documents/${file.id}/download`,'_blank');
+}
+
+function handleUploadFile() {
+  fileInput.value && fileInput.value.click();
+}
+
+async function onFileSelected(e) {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  try {
+    await uploadGroupDocument(groupId.value, f);
+    await loadGroupDocuments();
+    alert('Fitxer pujat correctament');
+  } catch (err) {
+    console.error('Upload failed', err);
+    alert('Error al pujar el fitxer: ' + (err.message || 'Error'));
+  } finally {
+    e.target.value = null;
+  }
+}
+
+/* =========================================================
+   E) CHAT
    ========================================================= */
 
 const groupMessages = ref([
@@ -297,23 +347,6 @@ function sendMessage() {
 }
 
 /* =========================================================
-   E) FITXERS
-   ========================================================= */
-
-const files = ref([
-  { id: 1, name: "Fitxer 1", date: "01/01/2026" },
-  { id: 2, name: "Fitxer 2", date: "02/01/2026" },
-]);
-
-function downloadFile(file) {
-  console.log("Download:", file);
-}
-
-function handleUploadFile() {
-  console.log("Upload file");
-}
-
-/* =========================================================
    F) VIDEOTRUCADA
    ========================================================= */
 
@@ -332,57 +365,6 @@ function goBack() {
 /* =========================================================
    H) DATA LOADING
    ========================================================= */
-
-async function loadGroupDetail() {
-  loading.value = true;
-  error.value = "";
-  try {
-    console.log("📡 Fetching group details for ID:", groupId.value);
-    const data = await getGroupById(groupId.value);
-    console.log("✅ Group data loaded:", data);
-    groupData.value = data;
-    
-    // Actualitzar membres - intentem múltiples estructures possibles
-    let membersList = [];
-    
-    // Intentar estructures possibles del backend
-    if (data.group_members && Array.isArray(data.group_members)) {
-      console.log("📋 Processing group_members array...");
-      membersList = data.group_members.map((m) => {
-        console.log("  Processing member:", m);
-        return {
-          id: m.user_id || m.users?.id || Date.now(),
-          name: m.users?.nom 
-            ? `${m.users.nom} ${m.users.cognom || ""}`.trim() 
-            : m.users?.email || "Unknown",
-          email: m.users?.email,
-          owner: m.member_role === "OWNER",
-        };
-      });
-    } else if (data.members && Array.isArray(data.members)) {
-      console.log("📋 Processing members array...");
-      membersList = data.members.map((m) => ({
-        id: m.id || Date.now(),
-        name: m.nom ? `${m.nom} ${m.cognom || ""}`.trim() : m.email || "Unknown",
-        email: m.email,
-        owner: m.is_owner || m.role === "OWNER",
-      }));
-    }
-    
-    if (membersList.length > 0) {
-      members.value = membersList;
-      console.log("✅ Members loaded:", members.value);
-    } else {
-      console.warn("⚠️ No members found in response");
-      members.value = [];
-    }
-  } catch (e) {
-    error.value = e.message || "Error al caregar grup";
-    console.error("❌ Error loading group:", error.value);
-  } finally {
-    loading.value = false;
-  }
-}
 
 onMounted(() => {
   loadGroupDetail();
@@ -476,34 +458,13 @@ onMounted(() => {
   margin-bottom: 30px;
 }
 
-.sectionTitle {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
-}
-
-.sectionTitle h3 {
-  font-size: 1.2rem;
-  font-weight: bold;
-}
-
-.uploadBtn {
-  background: #28a745;
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
 .filesList {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.fileItem {
+.fileRow {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -511,6 +472,16 @@ onMounted(() => {
   background: #f9f9f9;
   border: 1px solid #eee;
   border-radius: 4px;
+  cursor: pointer;
+}
+
+.fileRow:hover {
+  background: #f0f0f0;
+}
+
+.fileName {
+  font-weight: 500;
+  flex: 1;
 }
 
 .fileDate {
@@ -518,11 +489,9 @@ onMounted(() => {
   font-size: 0.9rem;
 }
 
-.downloadBtn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 1.2rem;
+.filesFooter {
+  margin-top: 15px;
+  text-align: right;
 }
 
 .auth-link {

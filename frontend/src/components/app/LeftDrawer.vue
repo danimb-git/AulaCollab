@@ -13,7 +13,7 @@
       class="drawer-item"
       @click="emitGoClass(c.id)"
     >
-      {{ c.name }}
+      {{ c.nom || c.name || 'Classe' }}
     </div>
 
     <!-- Secció Grups (només si showGroups = true) -->
@@ -26,7 +26,7 @@
         class="drawer-item"
         @click="emitGoGroup(g.id)"
       >
-        {{ g.name }}
+        {{ g.nom || g.name || 'Grup' }}
       </div>
     </template>
   </aside>
