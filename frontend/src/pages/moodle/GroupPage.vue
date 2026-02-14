@@ -127,15 +127,31 @@
   </AppModal>
 
   <!-- MODAL: CHAT DEL GRUP -->
-  <AppModal v-if="showChatModal" @close="showChatModal = false">
+  <AppModal v-if="showChatModal" @close="closeGroupChat">
     <div class="chatModal">
       <div class="chatMessages">
+        <div v-if="chatError" class="chatMsg" style="color: red;">
+          ⚠️ {{ chatError }}
+        </div>
+
+        <div v-else-if="chatLoading" class="chatMsg" style="opacity: 0.7;">
+          Carregant historial...
+        </div>
+
         <div
           v-for="m in groupMessages"
           :key="m.id"
           class="chatMsg"
         >
-          <strong>{{ m.user }}:</strong> {{ m.text }}
+          <strong>{{ displaySender(m) }}:</strong> {{ m.text }}
+        </div>
+
+        <div
+          v-if="!chatLoading && !chatError && groupMessages.length === 0"
+          class="chatMsg"
+          style="opacity: 0.7;"
+        >
+          Encara no hi ha missatges. Escriu el primer.
         </div>
       </div>
 
@@ -145,9 +161,9 @@
           type="text"
           v-model="newMessage"
           placeholder="Escriu un missatge..."
-          @keyup.enter="sendMessage"
+          @keyup.enter="sendGroupMessage"
         />
-        <button class="chatSendBtn" type="button" @click="sendMessage">→</button>
+        <button class="chatSendBtn" type="button" @click="sendGroupMessage">→</button>
       </div>
     </div>
   </AppModal>
@@ -156,7 +172,15 @@
 <script setup>
 import { ref, computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { getGroupById, addMemberToGroup, getCurrentUser } from "../../services/api";
+import {
+  apiRequest,
+  getGroupById,
+  addMemberToGroup,
+  getCurrentUser,
+  getGroupMessages,
+} from "../../services/api";
+
+import { getSocket } from "../../services/socket";
 
 import TopBar from "../../components/app/TopBar.vue";
 import AppModal from "../../components/ui/AppModal.vue";
@@ -174,6 +198,9 @@ const groupId = computed(() => route.params.id);
 const groupData = ref(null);
 const loading = ref(true);
 const error = ref("");
+
+// Usuari actual (via /api/me) per poder identificar "Jo" al chat.
+const me = ref(null);
 
 /* =========================================================
    B) TOPBAR
@@ -273,27 +300,148 @@ function removeMember(memberId) {
    D) CHAT
    ========================================================= */
 
-const groupMessages = ref([
-  { id: 1, user: "Usuari 1", text: "Hola grup!" },
-]);
-
+// Missatges reals del backend:
+// { id, text, senderId, receiverId, contextType, contextId, createdAt }
+const groupMessages = ref([]);
 const newMessage = ref("");
+const chatLoading = ref(false);
+const chatError = ref("");
 
-function openGroupChat() {
-  showChatModal.value = true;
+// Room activa del grup per poder fer leave quan tanquem modal.
+const activeGroupRoom = ref(null);
+
+function buildGroupRoom(id) {
+  return `group:${id}`;
 }
 
-function sendMessage() {
-  const text = newMessage.value.trim();
+function requireSocket() {
+  const socket = getSocket();
+  if (!socket) throw new Error("No access token: cannot connect socket");
+  return socket;
+}
+
+/**
+ * Listener singleton per missatges de grup.
+ * Guardem el flag a l'objecte socket per evitar duplicats.
+ */
+function ensureGroupChatListener() {
+  const socket = requireSocket();
+
+  if (!socket.__groupChatListenerReady) {
+    socket.on("new_message", (msg) => {
+      if (!msg || msg.contextType !== "group") return;
+      if (String(msg.contextId) !== String(groupId.value)) return;
+      groupMessages.value = [...groupMessages.value, msg];
+    });
+
+    socket.__groupChatListenerReady = true;
+  }
+
+  return socket;
+}
+
+function leaveGroupRoomIfNeeded() {
+  const socket = getSocket();
+  if (!socket) return;
+  if (!activeGroupRoom.value) return;
+
+  socket.emit("leave_room", { room: activeGroupRoom.value }, () => {
+    // ack opcional
+  });
+  activeGroupRoom.value = null;
+}
+
+/**
+ * Obrir el chat de grup (mateixa lògica que ClassPage):
+ * 1) obrir modal
+ * 2) carregar historial via HTTP
+ * 3) connectar socket + join room group:<id>
+ */
+async function openGroupChat() {
+  showChatModal.value = true;
+  chatError.value = "";
+  chatLoading.value = true;
+
+  try {
+    leaveGroupRoomIfNeeded();
+
+    // Historial
+    groupMessages.value = await getGroupMessages(groupId.value, 100);
+
+    // Realtime
+    const socket = ensureGroupChatListener();
+    const room = buildGroupRoom(groupId.value);
+    activeGroupRoom.value = room;
+
+    socket.emit("join_room", { room }, (ack) => {
+      if (ack && ack.ok === false) {
+        console.warn("⚠️ join_room(group) failed:", ack.error);
+      }
+    });
+  } catch (e) {
+    chatError.value = e.message || "Error obrint el xat del grup";
+    console.error("❌ openGroupChat error:", chatError.value);
+  } finally {
+    chatLoading.value = false;
+  }
+}
+
+function closeGroupChat() {
+  leaveGroupRoomIfNeeded();
+  showChatModal.value = false;
+  newMessage.value = "";
+}
+
+/**
+ * Enviar missatge al grup via Socket.IO.
+ * No fem push manual: esperem el `new_message` del backend.
+ */
+function sendGroupMessage() {
+  const text = (newMessage.value || "").trim();
   if (!text) return;
 
-  groupMessages.value.push({
-    id: Date.now(),
-    user: "Jo",
-    text,
-  });
+  try {
+    chatError.value = "";
+    const socket = ensureGroupChatListener();
 
-  newMessage.value = "";
+    socket.emit(
+      "send_message",
+      {
+        contextType: "group",
+        contextId: groupId.value,
+        text,
+      },
+      (ack) => {
+        if (ack && ack.ok === false) {
+          chatError.value = ack.error || "No s'ha pogut enviar el missatge";
+        }
+      },
+    );
+
+    newMessage.value = "";
+  } catch (e) {
+    chatError.value = e.message || "Error enviant missatge";
+  }
+}
+
+function displaySender(m) {
+  const myId = me.value?.id;
+  if (myId && String(m.senderId) === String(myId)) return "Jo";
+
+  const owner = groupData.value?.owner;
+  if (owner && String(owner.id) === String(m.senderId)) {
+    return [owner.nom, owner.cognom].filter(Boolean).join(" ") || owner.email;
+  }
+
+  const members = groupData.value?.group_members || [];
+  const member = members.find((gm) => String(gm?.users?.id) === String(m.senderId));
+  if (member?.users) {
+    const u = member.users;
+    return [u.nom, u.cognom].filter(Boolean).join(" ") || u.email;
+  }
+
+  const id = String(m.senderId || "");
+  return id ? `Usuari ${id.slice(-6)}` : "Usuari";
 }
 
 /* =========================================================
@@ -386,6 +534,15 @@ async function loadGroupDetail() {
 
 onMounted(() => {
   loadGroupDetail();
+
+  // Carrega l'usuari actual per poder identificar "Jo" en el chat.
+  apiRequest("/me")
+    .then((data) => {
+      me.value = data;
+    })
+    .catch(() => {
+      me.value = null;
+    });
 });
 </script>
 
