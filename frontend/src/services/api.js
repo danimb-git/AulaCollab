@@ -136,6 +136,24 @@ export async function getClassMessages(classId, limit = 50) {
   return res.messages || [];
 }
 
+/**
+ * Carrega l'historial del xat d'un grup.
+ *
+ * Backend: GET /api/messages?contextType=group&contextId=...&limit=...
+ * Response: { messages: [...] }
+ */
+export async function getGroupMessages(groupId, limit = 50) {
+  const params = new URLSearchParams({
+    contextType: "group",
+    contextId: groupId,
+    limit: String(limit),
+  });
+  const res = await apiRequest(`/messages?${params.toString()}`, {
+    method: "GET",
+  });
+  return res.messages || [];
+}
+
 export async function createGroup(payload) {
   console.log("📤 Creating group with payload:", payload);
   const res = await apiRequest("/groups", {
