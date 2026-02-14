@@ -121,16 +121,33 @@
     </div>
   </AppModal>
 
-  <!-- MODAL: CHAT DE CLASSE -->
-  <AppModal v-if="showChatModal" @close="showChatModal = false">
+  <!-- MODAL: CHAT DE CLASSE (REAL: HTTP historial + Socket.IO realtime) -->
+  <AppModal v-if="showChatModal" @close="closeClassChat">
     <div class="chatModal">
       <div class="chatMessages">
+        <!-- Error / loading states (per entendre què passa si falla API o permisos) -->
+        <div v-if="chatError" class="chatMsg" style="color: red;">
+          ⚠️ {{ chatError }}
+        </div>
+
+        <div v-else-if="chatLoading" class="chatMsg" style="opacity: 0.7;">
+          Carregant historial...
+        </div>
+
         <div
           v-for="m in classMessages"
           :key="m.id"
           class="chatMsg"
         >
-          <strong>{{ m.user }}:</strong> {{ m.text }}
+          <strong>{{ displaySender(m) }}:</strong> {{ m.text }}
+        </div>
+
+        <div
+          v-if="!chatLoading && !chatError && classMessages.length === 0"
+          class="chatMsg"
+          style="opacity: 0.7;"
+        >
+          Encara no hi ha missatges. Escriu el primer.
         </div>
       </div>
 
@@ -140,9 +157,9 @@
           type="text"
           v-model="newMessage"
           placeholder="Escriu un missatge..."
-          @keyup.enter="sendMessage"
+          @keyup.enter="sendClassMessage"
         />
-        <button class="chatSendBtn" type="button" @click="sendMessage">→</button>
+        <button class="chatSendBtn" type="button" @click="sendClassMessage">→</button>
       </div>
     </div>
   </AppModal>
@@ -151,7 +168,15 @@
 <script setup>
 import { ref, computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { getClassById, addMemberToClass, getCurrentUser } from "../../services/api";
+import {
+  apiRequest,
+  getClassById,
+  addMemberToClass,
+  getCurrentUser,
+  getClassMessages,
+} from "../../services/api.js";
+
+import { getSocket } from "../../services/socket.js";
 
 import TopBar from "../../components/app/TopBar.vue";
 import AppModal from "../../components/ui/AppModal.vue";
@@ -174,6 +199,15 @@ const classId = computed(() => route.params.id);
 const classData = ref(null);
 const loading = ref(true);
 const error = ref("");
+
+/**
+ * Usuari actual (via /api/me)
+ *
+ * Per què no fem servir només `getCurrentUser()`?
+ * - `getCurrentUser()` llegeix el JWT (payload) i no sempre porta nom/cognom.
+ * - /api/me ens dóna dades més fiables i consistents.
+ */
+const me = ref(null);
 
 // Determinar si és el propietari de la classe
 const isTeacher = computed(() => {
@@ -321,37 +355,194 @@ async function addStudentByEmail(email) {
 }
 
 /* =========================================================
-   D) CHAT (mock)
-   ========================================================= */
+   D) CHAT DE CLASSE (REAL)
+   =========================================================
+   Objectiu: que el chat de classe funcioni com el DM:
+   1) Historial (HTTP): GET /api/messages?contextType=class&contextId=<classId>
+   2) Temps real (Socket.IO):
+        - join_room { room: `class:<classId>` }
+        - send_message { contextType:'class', contextId:<classId>, text }
+        - new_message (broadcast a tots els membres connectats a la room)
 
-const classMessages = ref([
-  { id: 1, user: "Usuari 1", text: "Hola!" },
-  { id: 2, user: "Usuari 2", text: "Ei, què tal?" },
-]);
+   Diferència clau vs DM:
+   - En DM la conversa es defineix per (jo + receiverId) i la room és `dm:a:b` (ordenada).
+   - En classe la conversa es defineix per `classId` i la room és `class:<classId>`.
+ */
 
+// Llista de missatges reals que venen del backend:
+// { id, text, senderId, receiverId, contextType, contextId, createdAt }
+const classMessages = ref([]);
 const newMessage = ref("");
+const chatLoading = ref(false);
+const chatError = ref("");
 
-function openClassChat() {
-  // ✅ BACKEND:
-  // - (REST) GET /classes/:id/messages
-  // - (Sockets) connectar-te a room "class:<id>"
-  showChatModal.value = true;
+// Guardem quina room de classe tenim activa per poder fer leave quan tanquem el modal
+const activeClassRoom = ref(null);
+
+function buildClassRoom(id) {
+  return `class:${id}`;
 }
 
-function sendMessage() {
-  const text = newMessage.value.trim();
+/**
+ * Ens assegurem que tenim un socket connectat.
+ *
+ * IMPORTANT: reutilitzem el socket singleton (igual que DM) per evitar múltiples connexions.
+ */
+function requireSocket() {
+  const socket = getSocket();
+  if (!socket) throw new Error("No access token: cannot connect socket");
+  return socket;
+}
+
+/**
+ * Listener de `new_message` per xat de classe.
+ *
+ * Per què fem servir un guard (`__classChatListenerReady`)?
+ * - Si registres el listener cada cop que obres el modal, acabes amb missatges duplicats.
+ * - Amb el guard, el listener es registra una vegada.
+ */
+function ensureClassChatListener() {
+  const socket = requireSocket();
+
+  if (!socket.__classChatListenerReady) {
+    socket.on("new_message", (msg) => {
+      // Ens interessa només el context "class".
+      if (!msg || msg.contextType !== "class") return;
+
+      // Ens interessa només la classe que estem mirant.
+      if (String(msg.contextId) !== String(classId.value)) return;
+
+      // Afegim el missatge al final (el backend ja ordena per createdAt).
+      classMessages.value = [...classMessages.value, msg];
+    });
+
+    socket.__classChatListenerReady = true;
+  }
+
+  return socket;
+}
+
+function leaveClassRoomIfNeeded() {
+  const socket = getSocket();
+  if (!socket) return;
+  if (!activeClassRoom.value) return;
+
+  socket.emit("leave_room", { room: activeClassRoom.value }, () => {
+    // ack opcional
+  });
+  activeClassRoom.value = null;
+}
+
+/**
+ * Obrir el xat de classe:
+ * 1) obrir modal
+ * 2) carregar historial via HTTP
+ * 3) connectar socket + join room de classe
+ */
+async function openClassChat() {
+  showChatModal.value = true;
+  chatError.value = "";
+  chatLoading.value = true;
+
+  try {
+    // 0) Ens assegurem que no quedem enganxats a una room antiga
+    leaveClassRoomIfNeeded();
+
+    // 1) Historial HTTP
+    classMessages.value = await getClassMessages(classId.value, 100);
+
+    // 2) Socket realtime
+    const socket = ensureClassChatListener();
+
+    const room = buildClassRoom(classId.value);
+    activeClassRoom.value = room;
+
+    socket.emit("join_room", { room }, (ack) => {
+      if (ack && ack.ok === false) {
+        console.warn("⚠️ join_room(class) failed:", ack.error);
+      }
+    });
+  } catch (e) {
+    chatError.value = e.message || "Error obrint el xat de classe";
+    console.error("❌ openClassChat error:", chatError.value);
+  } finally {
+    chatLoading.value = false;
+  }
+}
+
+/**
+ * Tancar el xat de classe (quan el modal fa @close).
+ */
+function closeClassChat() {
+  leaveClassRoomIfNeeded();
+  showChatModal.value = false;
+  newMessage.value = "";
+}
+
+/**
+ * Enviar missatge a la classe via Socket.IO.
+ *
+ * Important:
+ * - NO fem push manual del missatge a `classMessages`.
+ * - Esperem el `new_message` del backend (això evita duplicats).
+ */
+function sendClassMessage() {
+  const text = (newMessage.value || "").trim();
   if (!text) return;
 
-  // ✅ BACKEND:
-  // - (REST) POST /classes/:id/messages { text }
-  // - (Sockets) emit "message" a la room
-  classMessages.value.push({
-    id: Date.now(),
-    user: "Jo",
-    text,
-  });
+  try {
+    chatError.value = "";
+    const socket = ensureClassChatListener();
 
-  newMessage.value = "";
+    socket.emit(
+      "send_message",
+      {
+        contextType: "class",
+        contextId: classId.value,
+        text,
+      },
+      (ack) => {
+        if (ack && ack.ok === false) {
+          chatError.value = ack.error || "No s'ha pogut enviar el missatge";
+        }
+      },
+    );
+
+    newMessage.value = "";
+  } catch (e) {
+    chatError.value = e.message || "Error enviant missatge";
+  }
+}
+
+/**
+ * Mostrar el nom de qui ha enviat un missatge.
+ *
+ * Com ho resol:
+ * - Si el senderId és el meu id -> "Jo"
+ * - Si tenim `classData.class_members` (getClassDetail ja l'inclou) -> busquem el nom.
+ * - Fallback -> mostrem un tros d'UUID per debug.
+ */
+function displaySender(m) {
+  const myId = me.value?.id;
+  if (myId && String(m.senderId) === String(myId)) return "Jo";
+
+  // Owner/professor (classData.users)
+  const owner = classData.value?.users;
+  if (owner && String(owner.id) === String(m.senderId)) {
+    return [owner.nom, owner.cognom].filter(Boolean).join(" ") || owner.email;
+  }
+
+  // Membres
+  const members = classData.value?.class_members || [];
+  const member = members.find((cm) => String(cm?.users?.id) === String(m.senderId));
+  if (member?.users) {
+    const u = member.users;
+    return [u.nom, u.cognom].filter(Boolean).join(" ") || u.email;
+  }
+
+  // Fallback (últims 6 caràcters)
+  const id = String(m.senderId || "");
+  return id ? `Usuari ${id.slice(-6)}` : "Usuari";
 }
 
 /* =========================================================
@@ -394,5 +585,15 @@ function goBack() {
 onMounted(() => {
   // Carrega els detalls de la classe
   loadClassDetail();
+
+  // Carrega l'usuari actual per poder identificar "Jo" en el chat
+  apiRequest("/me")
+    .then((data) => {
+      me.value = data;
+    })
+    .catch(() => {
+      // Si falla, no bloquegem tota la pàgina; el chat funcionarà però sense "Jo".
+      me.value = null;
+    });
 });
 </script>
