@@ -676,6 +676,33 @@ body::before {
 .msg-left.small {
     min-height: 60px;
     width: 55%;
+/* Missatges reals (DM) */
+.msg-row {
+    display: flex;
+    justify-content: flex-start;
+    margin: 6px 0;
+}
+
+.msg-row.me {
+    justify-content: flex-end;
+}
+
+.msg-bubble {
+    max-width: 80%;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: #d9d9d9;
+}
+
+.msg-text {
+    white-space: pre-wrap;
+}
+
+.msg-meta {
+    font-size: 11px;
+    opacity: 0.6;
+    margin-top: 4px;
+    text-align: right;
 }
 
 .chat-input-row {

@@ -11,6 +11,8 @@ const classesRoutes = require("./routes/classes.routes");
 
 const messagesRoutes = require("./routes/messages.routes");
 
+const usersRoutes = require("./routes/users.routes");
+
 const groupsRoutes = require("./routes/groups.routes");
 const app = express();
 
@@ -42,6 +44,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/classes", classesRoutes);
 app.use("/api", messagesRoutes);
 app.use("/api/groups", groupsRoutes);
+app.use("/api", usersRoutes);
 
 // IMPORTANT: error handler must be registered after all routes
 app.use(errorHandler);

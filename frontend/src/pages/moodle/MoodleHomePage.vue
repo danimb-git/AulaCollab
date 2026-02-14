@@ -1,9 +1,47 @@
 <template>
   <div class="app-shell">
     <!-- 1) BARRA SUPERIOR (sempre visible) -->
-    <TopBar @logout="onLogout" />
+    <TopBar
+      :isProfileOpen="isProfileMenuOpen"
+      :profileName="profileName"
+      @toggle-left="onClickHamburger"
+      @toggle-chat="onClickChatIcon"
+      @toggle-profile="onClickProfile"
+      @logout="onLogout"
+    />
 
-    <!-- Drawers are rendered globally in App.vue via shared shell state -->
+    <!-- 2) OVERLAY: quan hi ha algun menú lateral obert, fem fons semi-transparent.
+         Si cliques fora, es tanca tot. -->
+    <div
+      v-if="leftMenuOpen || chatMenuOpen"
+      class="overlay"
+      @click="closeSidePanels"
+    ></div>
+
+    <!-- 3) MENÚ LATERAL ESQUERRE (classes i grups) -->
+    <LeftDrawer
+      v-if="leftMenuOpen"
+      :classes="classes"
+      :groups="groups"
+      :showGroups="isStudent"
+      @go-class="goToClass"
+      @go-group="goToGroup"
+    />
+
+    <!-- 4) MENÚ LATERAL DRET (xats) -->
+    <RightChatDrawer
+      v-if="chatMenuOpen"
+      :chats="dmUsers"
+      :selectedChatId="selectedChatId"
+      :selectedUser="selectedChatUser"
+      :currentUserId="currentUser?.id"
+      :messages="dmMessages"
+      :loadingMessages="dmLoading"
+      :errorMessage="dmError"
+      @select-chat="openChat"
+      @back="closeChatConversation"
+      @send-message="sendDmMessage"
+    />
 
     <!-- 5) TÍTOL CENTRAL -->
     <h1 class="moodle-title">
@@ -74,14 +112,6 @@
         </section>
       </div>
     </main>
-
-    <!-- 7) BOTÓ TEMPORAL PER PROVAR (després s'elimina)
-         Serveix per veure la diferència ALUMNE/PROFESSOR sense backend. -->
-    <div style="position: fixed; left: 20px; bottom: 20px">
-      <button class="create-btn" @click="toggleRoleForTesting">
-        Mode: {{ isStudent ? "ALUMNE" : "PROFESSOR" }}
-      </button>
-    </div>
   </div>
 </template>
 
@@ -101,11 +131,15 @@
  *  - Els xats vindran de GET /chats o via WebSocket
  */
 
-import { ref, onMounted, onActivated } from "vue";
+import { ref, onMounted, computed, onActivated } from "vue";
 import { useRouter } from "vue-router";
-import { getClasses, getGroups, getCurrentUser } from "../../services/api";
+import { apiRequest, getClasses, getGroups, getUsers, getDmMessages } from "../../services/api.js";
+
+// Socket.IO (DM realtime)
+import { getSocket, disconnectSocket, buildDmRoom } from "../../services/socket.js";
 
 import TopBar from "../../components/app/TopBar.vue";
+
 
 const router = useRouter();
 
@@ -143,36 +177,89 @@ const groups = ref([]);
 const loading = ref(false);
 const error = ref("");
 
-const mockChats = ref([
-  { id: 1, name: "Usuari 1" },
-  { id: 2, name: "Usuari 2" },
-]);
+/**
+ * DM Chats (usuaris + historial)
+ *
+ * Objectiu:
+ * - Al RightChatDrawer es mostren tots els usuaris registrats (excepte jo).
+ * - Quan selecciono un usuari:
+ *    1) Carrego historial via HTTP GET /api/messages?contextType=dm&receiverId=...
+ *    2) Em connecto a Socket.IO i faig join a la room DM
+ *    3) Envio/rep missatges en temps real (event: new_message)
+ */
+const currentUser = ref(null);
+const dmUsers = ref([]);
+const dmMessages = ref([]);
+const dmLoading = ref(false);
+const dmError = ref("");
+
+// Guardem la room actual per poder fer leave quan canviem de conversa
+const activeDmRoom = ref(null);
 
 /* =========================================================
   B) ROL (extret del JWT)
   ========================================================= */
 
-const isStudent = ref(true);
+
 
 /**
  * Extreu el rol del JWT token
  */
-function loadUserRole() {
+/*function loadUserRole() {
   const user = getCurrentUser();
   if (user) {
     // Backend usa "role" en JWT (ALUMNE, PROFESSOR, ADMIN)
     console.log("👤 User role from JWT:", user.role);
-    isStudent.value = user.role === "ALUMNE";
+    role.value = user.role;
   }
-}
+}*/
+  const role = ref(null);
+  const isStudent = computed(() => role.value === "ALUMNE");
+
+// Nom a mostrar al botó de perfil (TopBar)
+const profileName = computed(() => {
+  const u = currentUser.value;
+  if (!u) return "Perfil";
+  const fullName = [u.nom, u.cognom].filter(Boolean).join(" ").trim();
+  return fullName || u.email || "Perfil";
+});
+
+// Usuari seleccionat al xat
+const selectedChatUser = computed(() => {
+  if (!selectedChatId.value) return null;
+  return dmUsers.value.find((u) => String(u.id) === String(selectedChatId.value)) || null;
+});
+
 
 /* =========================================================
    D) FUNCIONS
    ========================================================= */
 
-function toggleRoleForTesting() {
-  isStudent.value = !isStudent.value;
+function closeSidePanels() {
+  leftMenuOpen.value = false;
+  chatMenuOpen.value = false;
+  isProfileMenuOpen.value = false;
+  selectedChatId.value = null;
+  dmMessages.value = [];
 }
+
+function onClickHamburger() {
+  leftMenuOpen.value = !leftMenuOpen.value;
+  chatMenuOpen.value = false;
+  isProfileMenuOpen.value = false;
+}
+
+function onClickChatIcon() {
+  chatMenuOpen.value = !chatMenuOpen.value;
+  leftMenuOpen.value = false;
+  isProfileMenuOpen.value = false;
+}
+
+function onClickProfile() {
+  isProfileMenuOpen.value = !isProfileMenuOpen.value;
+}
+
+
 
 /**
  * BACKEND LOGOUT:
@@ -184,6 +271,8 @@ function toggleRoleForTesting() {
  */
  function onLogout() {
   localStorage.removeItem("accessToken");
+  // Si tanques sessió, desconnectem el socket per evitar que segueixi escoltant.
+  disconnectSocket();
   router.push("/auth/login");
 }
 
@@ -220,14 +309,163 @@ function goToCreateGroup() {
  * - Rebre missatges en temps real
  */
 function openChat(chatId) {
+  // `chatId` aquí és l'id de l'usuari receptor (amb qui faré DM)
   selectedChatId.value = chatId;
 
-  // 🔌 Aquí podríem fer:
-  // await api.get(`/chats/${chatId}/messages`)
+  // Carreguem historial + connectem realtime
+  loadDmConversation(chatId);
 }
 
 function closeChatConversation() {
+  // Surto de la conversa actual (leave room) però mantinc el socket connectat.
+  // Això fa que si torno a obrir un altre chat, sigui més ràpid.
+  leaveActiveDmRoom();
+
   selectedChatId.value = null;
+  dmMessages.value = [];
+}
+
+/**
+ * Carrega usuaris per la llista de DM.
+ * Backend: GET /api/users
+ */
+async function loadDmUsers() {
+  dmError.value = "";
+  try {
+    const users = await getUsers();
+
+    // No volem que aparegui "jo mateix" a la llista de DMs
+    const meId = currentUser.value?.id;
+    dmUsers.value = meId
+      ? users.filter((u) => String(u.id) !== String(meId))
+      : users;
+  } catch (e) {
+    dmError.value = e.message || "Error carregant usuaris";
+    console.error("❌ Error loading users:", dmError.value);
+  }
+}
+
+/**
+ * Assegura que el socket estigui connectat i que tinguem el listener per new_message.
+ *
+ * IMPORTANT:
+ * - Només volem registrar el listener UNA vegada.
+ * - Si el registrem cada cop que obres un chat, acabaries rebent missatges duplicats.
+ */
+function ensureSocketAndListeners() {
+  const socket = getSocket();
+  if (!socket) {
+    throw new Error("No access token: cannot connect socket");
+  }
+
+  // Marquem al socket si ja hem inicialitzat listeners
+  if (!socket.__dmListenersReady) {
+    socket.on("new_message", (msg) => {
+      // Aquest event l'emet el backend quan s'ha guardat un missatge.
+      // Nosaltres decidim si pertany a la conversa oberta.
+      if (!msg || msg.contextType !== "dm") return;
+
+      const meId = currentUser.value?.id;
+      const otherId = selectedChatId.value;
+      if (!meId || !otherId) return;
+
+      const isThisConversation =
+        (String(msg.senderId) === String(meId) && String(msg.receiverId) === String(otherId)) ||
+        (String(msg.senderId) === String(otherId) && String(msg.receiverId) === String(meId));
+
+      if (isThisConversation) {
+        dmMessages.value = [...dmMessages.value, msg];
+      }
+    });
+
+    socket.__dmListenersReady = true;
+  }
+
+  return socket;
+}
+
+function leaveActiveDmRoom() {
+  const socket = getSocket();
+  if (!socket) return;
+  if (!activeDmRoom.value) return;
+
+  socket.emit("leave_room", { room: activeDmRoom.value }, () => {
+    // ack opcional
+  });
+  activeDmRoom.value = null;
+}
+
+/**
+ * Obre conversa DM amb un usuari:
+ * 1) leave de la room anterior
+ * 2) GET historial
+ * 3) connect socket + join room
+ */
+async function loadDmConversation(receiverId) {
+  dmLoading.value = true;
+  dmError.value = "";
+
+  try {
+    // 0) sortim de room anterior si existia
+    leaveActiveDmRoom();
+
+    // 1) Historial via HTTP
+    dmMessages.value = await getDmMessages(receiverId, 50);
+
+    // 2) Socket realtime
+    const socket = ensureSocketAndListeners();
+    const meId = currentUser.value?.id;
+    if (!meId) throw new Error("Missing current user id");
+
+    const room = buildDmRoom(meId, receiverId);
+    activeDmRoom.value = room;
+
+    // join_room verifica permisos al backend (DM: només els dos usuaris)
+    socket.emit("join_room", { room }, (ack) => {
+      if (ack && ack.ok === false) {
+        console.warn("⚠️ join_room failed:", ack.error);
+      }
+    });
+  } catch (e) {
+    dmError.value = e.message || "Error carregant missatges";
+    console.error("❌ Error loading DM conversation:", dmError.value);
+  } finally {
+    dmLoading.value = false;
+  }
+}
+
+/**
+ * Envia un missatge DM.
+ *
+ * Aquest mètode és cridat quan RightChatDrawer emet @send-message.
+ */
+function sendDmMessage(text) {
+  try {
+    const receiverId = selectedChatId.value;
+    if (!receiverId) return;
+
+    const socket = ensureSocketAndListeners();
+
+    socket.emit(
+      "send_message",
+      {
+        contextType: "dm",
+        receiverId,
+        text,
+      },
+      (ack) => {
+        if (ack && ack.ok === false) {
+          console.warn("❌ send_message failed:", ack.error);
+        }
+        // Nota important:
+        // - NO afegim el missatge aquí a dmMessages.
+        // - El backend emet "new_message" a la room i el listener ja l'afegeix.
+        // Així evitem duplicats.
+      },
+    );
+  } catch (e) {
+    console.error("❌ Error sending DM:", e.message);
+  }
 }
 
 /**
@@ -258,10 +496,21 @@ async function loadData() {
 }
 
 // Carrega dades al muntar i quan tornem a la pàgina (refresh)
-onMounted(() => {
-  loadUserRole();
-  loadData();
+onMounted(async () => {
+  try {
+    const me = await apiRequest("/me");
+    role.value = me.role;
+    currentUser.value = me;
+  } catch (e) {
+    localStorage.removeItem("accessToken");
+    router.push("/auth/login");
+    return;
+  }
+
+  // Carreguem dades principals + usuaris del DM en paral·lel
+  await Promise.all([loadData(), loadDmUsers()]);
 });
+
 
 onActivated(() => {
   // Refrescar quando tornem a aquesta pàgina (ex: després de crear classe)
