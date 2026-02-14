@@ -73,6 +73,72 @@ export async function addMemberToClass(classId, emails) {
 }
 
 /* ============================================
+   DOCUMENTS (FILES)
+   ============================================ */
+
+export async function getClassDocuments(classId) {
+  console.log("📡 Fetching documents for class:", classId);
+  const res = await apiRequest(`/classes/${classId}/documents`, { method: "GET" });
+  return res.data || [];
+}
+
+export async function uploadClassDocument(classId, file) {
+  console.log("📤 Uploading document for class:", classId, file && file.name);
+  const token = getAccessToken();
+  const form = new FormData();
+  form.append("file", file);
+
+  const headers = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetch(`${API_BASE_URL}/classes/${classId}/documents`, {
+    method: "POST",
+    headers,
+    body: form,
+  });
+
+  let data = null;
+  try { data = await response.json(); } catch (_) {}
+  if (!response.ok) {
+    throw new Error(data?.error || "Upload failed");
+  }
+  return data.data;
+}
+
+/* ============================================
+   DOCUMENTS - GROUPS
+   ============================================ */
+
+export async function getGroupDocuments(groupId) {
+  console.log("📡 Fetching documents for group:", groupId);
+  const res = await apiRequest(`/groups/${groupId}/documents`, { method: "GET" });
+  return res.data || [];
+}
+
+export async function uploadGroupDocument(groupId, file) {
+  console.log("📤 Uploading document for group:", groupId, file && file.name);
+  const token = getAccessToken();
+  const form = new FormData();
+  form.append("file", file);
+
+  const headers = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetch(`${API_BASE_URL}/groups/${groupId}/documents`, {
+    method: "POST",
+    headers,
+    body: form,
+  });
+
+  let data = null;
+  try { data = await response.json(); } catch (_) {}
+  if (!response.ok) {
+    throw new Error(data?.error || "Upload failed");
+  }
+  return data.data;
+}
+
+/* ============================================
    GROUP ENDPOINTS
    ============================================ */
 

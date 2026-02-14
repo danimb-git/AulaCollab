@@ -139,8 +139,6 @@ import { apiRequest, getClasses, getGroups, getUsers, getDmMessages } from "../.
 import { getSocket, disconnectSocket, buildDmRoom } from "../../services/socket.js";
 
 import TopBar from "../../components/app/TopBar.vue";
-import LeftDrawer from "../../components/app/LeftDrawer.vue";
-import RightChatDrawer from "../../components/app/RightChatDrawer.vue";
 
 
 const router = useRouter();
@@ -199,17 +197,8 @@ const dmError = ref("");
 const activeDmRoom = ref(null);
 
 /* =========================================================
-   B) ESTAT UI
-   ========================================================= */
-
-const leftMenuOpen = ref(false);
-const chatMenuOpen = ref(false);
-const isProfileMenuOpen = ref(false);
-const selectedChatId = ref(null);
-
-/* =========================================================
-   C) ROL (extret del JWT)
-   ========================================================= */
+  B) ROL (extret del JWT)
+  ========================================================= */
 
 
 
