@@ -81,6 +81,43 @@ export async function getGroups() {
   return res.data || [];
 }
 
+/* ============================================
+   USERS ENDPOINTS (DM chat list)
+   ============================================ */
+
+/**
+ * Retorna tots els usuaris registrats.
+ *
+ * Backend: GET /api/users
+ * Response: { data: [{id, nom, cognom, email, role, createdAt}] }
+ */
+export async function getUsers() {
+  const res = await apiRequest("/users", { method: "GET" });
+  return res.data || [];
+}
+
+/* ============================================
+   MESSAGES ENDPOINTS (DM history)
+   ============================================ */
+
+/**
+ * Carrega l'historial DM entre l'usuari loguejat i `receiverId`.
+ *
+ * Backend: GET /api/messages?contextType=dm&receiverId=...&limit=...
+ * Response: { messages: [...] }
+ */
+export async function getDmMessages(receiverId, limit = 50) {
+  const params = new URLSearchParams({
+    contextType: "dm",
+    receiverId,
+    limit: String(limit),
+  });
+  const res = await apiRequest(`/messages?${params.toString()}`, {
+    method: "GET",
+  });
+  return res.messages || [];
+}
+
 export async function createGroup(payload) {
   console.log("📤 Creating group with payload:", payload);
   const res = await apiRequest("/groups", {

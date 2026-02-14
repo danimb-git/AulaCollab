@@ -15,7 +15,7 @@
 
       <!-- Botó perfil -->
       <button class="profile-btn" @click="emitToggleProfile">
-        <span class="profile-text">Perfil</span>
+        <span class="profile-text">{{ profileName || "Perfil" }}</span>
         <span class="profile-avatar"></span>
       </button>
     </div>
@@ -41,6 +41,9 @@
 defineProps({
   // El pare li diu si el menú de perfil està obert o no
   isProfileOpen: { type: Boolean, default: false },
+
+  // Nom (o email) a mostrar al botó de perfil
+  profileName: { type: String, default: "" },
 });
 
 const emit = defineEmits([
