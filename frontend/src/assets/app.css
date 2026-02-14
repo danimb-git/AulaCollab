@@ -676,6 +676,7 @@ body::before {
 .msg-left.small {
     min-height: 60px;
     width: 55%;
+}
 /* Missatges reals (DM) */
 .msg-row {
     display: flex;
