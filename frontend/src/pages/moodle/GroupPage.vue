@@ -167,10 +167,17 @@
       </div>
     </div>
   </AppModal>
+  <AppModal v-if="showVideoModal" @close="closeVideoModal">
+  <div class="videoModal">
+    <video ref="localVideoRef" autoplay playsinline muted style="width: 48%; background: #000;"></video>
+    <video ref="remoteVideoRef" autoplay playsinline style="width: 48%; background: #000;"></video>
+  </div>
+</AppModal>
+
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   apiRequest,
@@ -178,9 +185,9 @@ import {
   addMemberToGroup,
   getCurrentUser,
   getGroupMessages,
-} from "../../services/api";
+} from "../../services/api.js";
 
-import { getSocket } from "../../services/socket";
+import { getSocket } from "../../services/socket.js";
 
 import TopBar from "../../components/app/TopBar.vue";
 import AppModal from "../../components/ui/AppModal.vue";
@@ -465,9 +472,270 @@ function handleUploadFile() {
    F) VIDEOTRUCADA
    ========================================================= */
 
-function handleVideoCall() {
-  console.log("Videotrucada");
+  const showVideoModal = ref(false);
+  const localVideoRef = ref(null);
+  const remoteVideoRef = ref(null);
+
+  const localStream = ref(null);
+  const remoteStream = ref(null);
+
+  const peer = ref(null);
+  const pendingCallerUserId = ref(null);
+  const activeGroupCall = ref(null);
+
+  const rtcConfig = {
+    iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+  };
+
+  async function startLocalMedia() {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    localStream.value = stream;
+    if (localVideoRef.value) localVideoRef.value.srcObject = stream;
+  }
+
+  function stopLocalMedia() {
+    if (localStream.value) {
+      localStream.value.getTracks().forEach((t) => t.stop());
+      localStream.value = null;
+    }
+  }
+
+  function ensureLocalTracksOnPeer(pc) {
+  if (!localStream.value) return;
+  const senders = pc.getSenders();
+  const senderTrackIds = new Set(senders.map((s) => s.track?.id).filter(Boolean));
+
+  localStream.value.getTracks().forEach((track) => {
+    if (!senderTrackIds.has(track.id)) {
+      pc.addTrack(track, localStream.value);
+    }
+  });
 }
+
+
+  function buildGroupParticipants() {
+    const meUser = getCurrentUser();
+    const myId = meUser?.sub || meUser?.id;
+
+    const rows = groupData.value?.group_members || [];
+    const ids = rows.map((m) => m.user_id || m.users?.id).filter(Boolean);
+
+    return [...new Set(ids)].filter((id) => String(id) !== String(myId));
+  }
+
+  function createPeerConnection() {
+    const pc = new RTCPeerConnection(rtcConfig);
+
+    if (localStream.value) {
+      localStream.value.getTracks().forEach((track) => {
+        pc.addTrack(track, localStream.value);
+      });
+    }
+
+    pc.ontrack = (event) => {
+      const [stream] = event.streams;
+      remoteStream.value = stream;
+      if (remoteVideoRef.value) remoteVideoRef.value.srcObject = stream;
+      console.log("remote track:", event.track?.kind, event.streams);
+
+    };
+
+    pc.onicecandidate = (event) => {
+      if (!event.candidate) return;
+      const socket = getSocket();
+      if (!socket || !pendingCallerUserId.value) return;
+
+      socket.emit("webrtc_ice_candidate", {
+        context: "group",
+        id: groupId.value,
+        targetUserId: pendingCallerUserId.value,
+        candidate: event.candidate,
+      });
+    };
+
+    peer.value = pc;
+    return pc;
+  }
+
+  async function handleVideoCall() {
+    try {
+      showVideoModal.value = true;
+      await startLocalMedia();
+
+      const socket = getSocket();
+      if (!socket) {
+        alert("No hi ha socket connectat");
+        return;
+      }
+
+      const participants = buildGroupParticipants();
+      if (!participants.length) {
+        alert("No hi ha participants per convidar al grup");
+        return;
+      }
+
+      socket.emit("call_start", {
+        context: "group",
+        id: groupId.value,
+        participants,
+      });
+
+      console.log(" call_start(group) enviat", participants);
+    } catch (e) {
+      console.error("Error obrint càmera/mic:", e.message);
+      alert("No s'ha pogut obrir càmera/mic");
+    }
+  }
+
+  async function onGroupCallInvite(payload) {
+    if (!payload || payload.context !== "group") return;
+    if (String(payload.id) !== String(groupId.value)) return;
+
+    activeGroupCall.value = payload;
+    pendingCallerUserId.value = payload.fromUserId;
+
+    const socket = getSocket();
+    if (!socket) return;
+
+    try {
+      showVideoModal.value = true;
+      await startLocalMedia();
+
+      socket.emit("call_join", {
+        context: "group",
+        id: groupId.value,
+        callerUserId: payload.fromUserId,
+      });
+    } catch (e) {
+      console.error("Error preparant media en rebre invite(group):", e.message);
+    }
+  }
+
+  async function onGroupCallJoined(payload) {
+    if (!payload || payload.context !== "group") return;
+    if (String(payload.id) !== String(groupId.value)) return;
+
+    pendingCallerUserId.value = payload.fromUserId;
+
+    const pc = peer.value || createPeerConnection();
+    ensureLocalTracksOnPeer(pc);
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    const socket = getSocket();
+    socket.emit("webrtc_offer", {
+      context: "group",
+      id: groupId.value,
+      targetUserId: payload.fromUserId,
+      sdp: offer,
+    });
+
+    console.log(" offer enviada (group)");
+  }
+
+  async function onWebrtcOffer({ fromUserId, sdp }) {
+    pendingCallerUserId.value = fromUserId;
+
+    const pc = peer.value || createPeerConnection();
+    ensureLocalTracksOnPeer(pc);
+    await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+
+    const socket = getSocket();
+    socket.emit("webrtc_answer", {
+      context: "group",
+      id: groupId.value,
+      targetUserId: fromUserId,
+      sdp: answer,
+    });
+
+    console.log(" answer enviada (group)");
+  }
+
+  async function onWebrtcAnswer({ sdp }) {
+  if (!peer.value || !sdp) return;
+
+  // només l'iniciador (have-local-offer) ha d'aplicar answer
+  if (peer.value.signalingState !== "have-local-offer") {
+    console.warn("Skip answer: signalingState=", peer.value.signalingState);
+    return;
+  }
+
+  await peer.value.setRemoteDescription(new RTCSessionDescription(sdp));
+  console.log("✅ answer rebuda (group)");
+}
+
+
+  async function onWebrtcIceCandidate({ candidate }) {
+    if (!peer.value || !candidate) return;
+    await peer.value.addIceCandidate(new RTCIceCandidate(candidate));
+  }
+
+  function onGroupCallError(message) {
+    console.error(" call_error(group):", message);
+  }
+
+  function onGroupCallEnded() {
+    closeVideoModal();
+  }
+
+  function setupGroupCallListeners() {
+    const socket = getSocket();
+    if (!socket) return;
+    if (socket.__groupCallListenersReady) return;
+
+    socket.on("call_invite", onGroupCallInvite);
+    socket.on("call_joined", onGroupCallJoined);
+    socket.on("call_error", onGroupCallError);
+    socket.on("call_ended", onGroupCallEnded);
+
+    socket.on("webrtc_offer", onWebrtcOffer);
+    socket.on("webrtc_answer", onWebrtcAnswer);
+    socket.on("webrtc_ice_candidate", onWebrtcIceCandidate);
+
+    socket.__groupCallListenersReady = true;
+  }
+
+  function cleanupGroupCallListeners() {
+    const socket = getSocket();
+    if (!socket) return;
+
+    socket.off("call_invite", onGroupCallInvite);
+    socket.off("call_joined", onGroupCallJoined);
+    socket.off("call_error", onGroupCallError);
+    socket.off("call_ended", onGroupCallEnded);
+
+    socket.off("webrtc_offer", onWebrtcOffer);
+    socket.off("webrtc_answer", onWebrtcAnswer);
+    socket.off("webrtc_ice_candidate", onWebrtcIceCandidate);
+
+    socket.__groupCallListenersReady = false;
+  }
+
+  function closeVideoModal() {
+    const socket = getSocket();
+    if (socket) {
+      socket.emit("call_end", {
+        context: "group",
+        id: groupId.value,
+      });
+    }
+
+    if (peer.value) {
+      peer.value.close();
+      peer.value = null;
+    }
+
+    pendingCallerUserId.value = null;
+
+    if (remoteVideoRef.value) remoteVideoRef.value.srcObject = null;
+    remoteStream.value = null;
+
+    stopLocalMedia();
+    showVideoModal.value = false;
+  }
 
 /* =========================================================
    G) NAVEGACIÓ
@@ -534,6 +802,8 @@ async function loadGroupDetail() {
 
 onMounted(() => {
   loadGroupDetail();
+  setupGroupCallListeners();  
+
 
   // Carrega l'usuari actual per poder identificar "Jo" en el chat.
   apiRequest("/me")
@@ -544,6 +814,12 @@ onMounted(() => {
       me.value = null;
     });
 });
+
+onUnmounted(() => {
+  cleanupGroupCallListeners();
+  closeVideoModal();
+});
+
 </script>
 
 <style scoped>

@@ -163,10 +163,16 @@
       </div>
     </div>
   </AppModal>
+  <AppModal v-if="showVideoModal" @close="closeVideoModal">
+  <div class="videoModal">
+    <video ref="localVideoRef" autoplay playsinline muted style="width: 48%; background: #000;"></video>
+    <video ref="remoteVideoRef" autoplay playsinline style="width: 48%; background: #000;"></video>
+  </div>
+</AppModal>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   apiRequest,
@@ -199,6 +205,7 @@ const classId = computed(() => route.params.id);
 const classData = ref(null);
 const loading = ref(true);
 const error = ref("");
+
 
 /**
  * Usuari actual (via /api/me)
@@ -273,13 +280,14 @@ function handleLogout() {
 /**
  * Extreu el rol del JWT i determina si és professor
  */
+/*
 function loadUserRole() {
   const user = getCurrentUser();
   if (user && classData.value) {
     // Es professor si és owner de la classe o si és ADMIN
     isTeacher.value = user.id === classData.value.professor_id || user.rol === "ADMIN";
   }
-}
+}*/
 
 /**
  * Carrega els detalls de la classe des del backend
@@ -564,11 +572,246 @@ function handleUploadFile() {
 /* =========================================================
    F) VIDEOTRUACADA
    ========================================================= */
+   
+  const showVideoModal = ref(false);
+  const localVideoRef = ref(null);
+  const remoteVideoRef = ref(null);
 
-function handleVideoCall() {
-  // De moment sense funcionalitat (com has dit)
-  console.log("Videotrucada (pending)");
+  const localStream = ref(null);
+  const remoteStream = ref(null);
+
+  const peer = ref(null);
+  const pendingCallerUserId = ref(null);
+  const activeClassCall = ref(null);
+
+  const rtcConfig = {
+    iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+  };
+
+   
+  async function handleVideoCall() {
+  try {
+    showVideoModal.value = true;
+    await startLocalMedia();
+
+    const socket = getSocket();
+    if (!socket) {
+      alert("No hi ha socket connectat");
+      return;
+    }
+
+    socket.emit("call_start", {
+      context: "class",
+      id: classId.value,
+    });
+
+    console.log(" Media local preparada");
+    console.log(" call_start(class) enviat");
+  } catch (e) {
+    console.error("Error obrint càmera/mic:", e.message);
+    alert("No s'ha pogut obrir càmera/mic");
+  }
 }
+
+async function startLocalMedia() {
+  const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+  localStream.value = stream;
+  if (localVideoRef.value) {
+    localVideoRef.value.srcObject = stream;
+  }
+}
+
+function stopLocalMedia() {
+  if (localStream.value) {
+    localStream.value.getTracks().forEach((t) => t.stop());
+    localStream.value = null;
+  }
+}
+
+async function onClassCallInvite(payload) {
+  if (!payload || payload.context !== "class") return;
+  if (String(payload.id) !== String(classId.value)) return;
+
+  console.log("📞 call_invite(class):", payload);
+  activeClassCall.value = payload;
+
+  const socket = getSocket();
+  if (!socket) return;
+
+  try {
+    showVideoModal.value = true;
+    await startLocalMedia();
+
+    // acceptem automàticament per provar
+    socket.emit("call_join", {
+      context: "class",
+      id: classId.value,
+      callerUserId: payload.fromUserId,
+    });
+  } catch (e) {
+    console.error("Error preparant media en rebre invite:", e.message);
+  }
+}
+
+
+function onClassCallError(message) {
+  console.error(" call_error(class):", message);
+}
+
+function onClassCallEnded(payload) {
+  if (!payload) return;
+  closeVideoModal();
+}
+
+
+function setupClassCallListeners() {
+  const socket = getSocket();
+  if (!socket) return;
+
+  // evita registrar listeners més d'una vegada
+  if (socket.__classCallListenersReady) return;
+
+  socket.on("call_invite", onClassCallInvite);
+  socket.on("call_joined", onClassCallJoined);
+  socket.on("call_error", onClassCallError);
+
+  socket.on("webrtc_offer", onWebrtcOffer);
+  socket.on("webrtc_answer", onWebrtcAnswer);
+  socket.on("webrtc_ice_candidate", onWebrtcIceCandidate);
+
+  // si l'altre penja, tanquem modal
+  socket.on("call_ended", onClassCallEnded);
+
+  socket.__classCallListenersReady = true;
+}
+
+function cleanupClassCallListeners() {
+  const socket = getSocket();
+  if (!socket) return;
+
+  socket.off("call_invite", onClassCallInvite);
+  socket.off("call_joined", onClassCallJoined);
+  socket.off("call_error", onClassCallError);
+
+  socket.off("webrtc_offer", onWebrtcOffer);
+  socket.off("webrtc_answer", onWebrtcAnswer);
+  socket.off("webrtc_ice_candidate", onWebrtcIceCandidate);
+
+  socket.off("call_ended", onClassCallEnded);
+
+  socket.__classCallListenersReady = false;
+}
+
+function closeVideoModal() {
+  const socket = getSocket();
+  if (socket) {
+    socket.emit("call_end", {
+      context: "class",
+      id: classId.value,
+    });
+  }
+
+  if (peer.value) {
+    peer.value.close();
+    peer.value = null;
+  }
+
+  pendingCallerUserId.value = null;
+
+  if (remoteVideoRef.value) {
+    remoteVideoRef.value.srcObject = null;
+  }
+  remoteStream.value = null;
+
+  stopLocalMedia();
+  showVideoModal.value = false;
+}
+
+
+
+function createPeerConnection() {
+  const pc = new RTCPeerConnection(rtcConfig);
+
+  if (localStream.value) {
+    localStream.value.getTracks().forEach((track) => pc.addTrack(track, localStream.value));
+  }
+
+  pc.ontrack = (event) => {
+    const [stream] = event.streams;
+    remoteStream.value = stream;
+    if (remoteVideoRef.value) remoteVideoRef.value.srcObject = stream;
+  };
+
+  pc.onicecandidate = (event) => {
+    if (!event.candidate) return;
+    const socket = getSocket();
+    if (!socket || !pendingCallerUserId.value) return;
+
+    socket.emit("webrtc_ice_candidate", {
+      context: "class",
+      id: classId.value,
+      targetUserId: pendingCallerUserId.value,
+      candidate: event.candidate,
+    });
+  };
+
+  peer.value = pc;
+  return pc;
+}
+
+async function onClassCallJoined(payload) {
+  if (!payload || payload.context !== "class") return;
+  if (String(payload.id) !== String(classId.value)) return;
+
+  pendingCallerUserId.value = payload.fromUserId;
+
+  const pc = peer.value || createPeerConnection();
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  const socket = getSocket();
+  socket.emit("webrtc_offer", {
+    context: "class",
+    id: classId.value,
+    targetUserId: payload.fromUserId,
+    sdp: offer,
+  });
+
+  console.log("✅ offer enviada");
+}
+
+async function onWebrtcOffer({ fromUserId, sdp }) {
+  pendingCallerUserId.value = fromUserId;
+
+  const pc = peer.value || createPeerConnection();
+  await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+
+  const socket = getSocket();
+  socket.emit("webrtc_answer", {
+    context: "class",
+    id: classId.value,
+    targetUserId: fromUserId,
+    sdp: answer,
+  });
+
+  console.log("✅ answer enviada");
+}
+async function onWebrtcAnswer({ sdp }) {
+  if (!peer.value) return;
+  await peer.value.setRemoteDescription(new RTCSessionDescription(sdp));
+  console.log("✅ answer rebuda");
+}
+
+async function onWebrtcIceCandidate({ candidate }) {
+  if (!peer.value || !candidate) return;
+  await peer.value.addIceCandidate(new RTCIceCandidate(candidate));
+}
+
+
+
 
 /* =========================================================
    G) NAVEGACIÓ
@@ -585,6 +828,8 @@ function goBack() {
 onMounted(() => {
   // Carrega els detalls de la classe
   loadClassDetail();
+  setupClassCallListeners();
+
 
   // Carrega l'usuari actual per poder identificar "Jo" en el chat
   apiRequest("/me")
@@ -596,4 +841,10 @@ onMounted(() => {
       me.value = null;
     });
 });
+
+onUnmounted(() => {
+  cleanupClassCallListeners();
+  stopLocalMedia();
+});
+
 </script>
