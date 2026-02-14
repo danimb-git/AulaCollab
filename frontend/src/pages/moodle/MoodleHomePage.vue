@@ -124,13 +124,14 @@
  *  - Els xats vindran de GET /chats o via WebSocket
  */
 
-import { ref, onMounted, computed  } from "vue";
+import { ref, onMounted, computed, onActivated } from "vue";
 import { useRouter } from "vue-router";
-import { apiRequest } from "../../services/api.js";
+import { apiRequest, getClasses, getGroups, } from "../../services/api.js";
 
 import TopBar from "../../components/app/TopBar.vue";
 import LeftDrawer from "../../components/app/LeftDrawer.vue";
 import RightChatDrawer from "../../components/app/RightChatDrawer.vue";
+
 
 const router = useRouter();
 
@@ -186,19 +187,19 @@ const selectedChatId = ref(null);
    C) ROL (extret del JWT)
    ========================================================= */
 
-const isStudent = ref(true);
+
 
 /**
  * Extreu el rol del JWT token
  */
-function loadUserRole() {
+/*function loadUserRole() {
   const user = getCurrentUser();
   if (user) {
     // Backend usa "role" en JWT (ALUMNE, PROFESSOR, ADMIN)
     console.log("👤 User role from JWT:", user.role);
-    isStudent.value = user.role === "ALUMNE";
+    role.value = user.role;
   }
-}
+}*/
   const role = ref(null);
   const isStudent = computed(() => role.value === "ALUMNE");
 
@@ -252,18 +253,6 @@ function onClickProfile() {
 function goToClass(classId) {
   router.push(`/classes/${classId}`);
 }
-
-
-onMounted(async () => {
-  try {
-    const me = await apiRequest("/me");
-    role.value = me.role; // ALUMNE | PROFESSOR | ADMIN
-  } catch (e) {
-    localStorage.removeItem("accessToken");
-    router.push("/auth/login");
-  }
-});
-
 
 /**
  * 📡 NAVEGACIÓ A GRUP
@@ -328,10 +317,19 @@ async function loadData() {
 }
 
 // Carrega dades al muntar i quan tornem a la pàgina (refresh)
-onMounted(() => {
-  loadUserRole();
+onMounted(async () => {
+  try {
+    const me = await apiRequest("/me");
+    role.value = me.role;
+  } catch (e) {
+    localStorage.removeItem("accessToken");
+    router.push("/auth/login");
+    return;
+  }
+
   loadData();
 });
+
 
 onActivated(() => {
   // Refrescar quando tornem a aquesta pàgina (ex: després de crear classe)
