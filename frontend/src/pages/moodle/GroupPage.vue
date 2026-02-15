@@ -1,6 +1,11 @@
 <template>
   <!-- TOP BAR -->
-  <TopBar @logout="handleLogout" />
+  <TopBar
+    @toggle-left="toggleLeft"
+    @toggle-chat="toggleChat"
+    @toggle-profile="toggleProfile"
+    @logout="handleLogout"
+  />
 
   <main class="page">
     <!-- TÍTOL -->
@@ -178,11 +183,14 @@ import {
   addMemberToGroup,
   getCurrentUser,
   getGroupMessages,
+  getGroupDocuments,
+  uploadGroupDocument,
 } from "../../services/api";
 
 import { getSocket } from "../../services/socket";
 
 import TopBar from "../../components/app/TopBar.vue";
+import { toggleLeft, toggleChat, toggleProfile } from "../../composables/useShell";
 import AppModal from "../../components/ui/AppModal.vue";
 import FormField from "../../components/ui/FormField.vue";
 import PrimaryButton from "../../components/ui/PrimaryButton.vue";
