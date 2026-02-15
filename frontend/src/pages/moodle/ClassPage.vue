@@ -1,10 +1,10 @@
 <template>
   <!-- TOP BAR (mateixa que MoodleHomePage) -->
   <TopBar
-    :onToggleLeft="toggleLeft"
-    :onToggleRight="toggleRight"
-    :onToggleProfile="toggleProfile"
-    :showProfileDropdown="showProfileDropdown"
+    :isProfileOpen="showProfileDropdown"
+    @toggle-left="toggleLeft"
+    @toggle-chat="toggleChat"
+    @toggle-profile="toggleProfile"
     @logout="handleLogout"
   />
 
@@ -177,11 +177,14 @@ import {
   addMemberToClass,
   getCurrentUser,
   getClassMessages,
+  getClassDocuments,
+  uploadClassDocument,
 } from "../../services/api.js";
 
 import { getSocket } from "../../services/socket.js";
 
 import TopBar from "../../components/app/TopBar.vue";
+import { toggleLeft, toggleChat, toggleProfile } from "../../composables/useShell";
 import AppModal from "../../components/ui/AppModal.vue";
 
 /**
@@ -234,35 +237,9 @@ const fileInput = ref(null);
 
 const showProfileDropdown = ref(false);
 
-function toggleLeft() {
-  // ✅ Aquí aniria obrir el menú lateral esquerra (classes/grups)
-  // Exemple: leftDrawerOpen.value = !leftDrawerOpen.value
-  console.log("toggle left drawer");
-}
-
-function toggleRight() {
-  // ✅ Aquí aniria obrir el menú lateral dret (chats)
-  console.log("toggle right drawer");
-}
-
-function toggleProfile() {
-  showProfileDropdown.value = !showProfileDropdown.value;
-}
-
 function handleLogout() {
   localStorage.removeItem("accessToken");
   router.push("/auth/login");
-}
-
-/**
- * Extreu el rol del JWT i determina si és professor
- */
-function loadUserRole() {
-  const user = getCurrentUser();
-  if (user && classData.value) {
-    // Es professor si és owner de la classe o si és ADMIN
-    isTeacher.value = user.id === classData.value.professor_id || user.rol === "ADMIN";
-  }
 }
 
 /**
@@ -289,6 +266,8 @@ async function loadClassDetail() {
         list = raw.members.map((u) => ({ id: u.id || Date.now() + Math.random(), name: u.nom || u.name || u.email }));
       }
       students.value = list;
+      // intentar carregar documents també
+      try { await loadClassDocuments(); } catch (_) {}
     } catch (e) {
       console.warn("Could not parse students from class data", e);
       students.value = [];
@@ -300,8 +279,6 @@ async function loadClassDetail() {
   } finally {
     loading.value = false;
   }
-    // intentar carregar documents també
-    try { await loadClassDocuments(); } catch (_) {}
 }
 
 /* =========================================================

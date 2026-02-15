@@ -2,7 +2,7 @@
   <div class="app-shell">
     <!-- 1) BARRA SUPERIOR (sempre visible) -->
     <TopBar
-      :isProfileOpen="isProfileMenuOpen"
+      :isProfileOpen="profileMenuOpen"
       :profileName="profileName"
       @toggle-left="onClickHamburger"
       @toggle-chat="onClickChatIcon"
@@ -133,15 +133,31 @@
 
 import { ref, onMounted, computed, onActivated } from "vue";
 import { useRouter } from "vue-router";
-import { apiRequest, getClasses, getGroups, getUsers, getDmMessages } from "../../services/api.js";
+import { apiRequest, getClasses, getGroups, getUsers, getDmMessages, getCurrentUser } from "../../services/api.js";
 
 // Socket.IO (DM realtime)
 import { getSocket, disconnectSocket, buildDmRoom } from "../../services/socket.js";
 
 import TopBar from "../../components/app/TopBar.vue";
+import LeftDrawer from "../../components/app/LeftDrawer.vue";
+import RightChatDrawer from "../../components/app/RightChatDrawer.vue";
+import {
+  leftMenuOpen,
+  chatMenuOpen,
+  profileMenuOpen,
+  toggleLeft,
+  toggleChat,
+  toggleProfile,
+} from "../../composables/useShell";
 
 
 const router = useRouter();
+
+// UI state for side panels / drawers (shared composable)
+// useShell provides shared refs used by TopBar and other components
+// so we use the same source of truth here.
+// Note: `profileMenuOpen` is the composable ref for the profile dropdown state.
+const selectedChatId = ref(null);
 
 /* =========================================================
    A) DADES (MOCK)
@@ -162,20 +178,56 @@ const router = useRouter();
  */
 
 const mockClasses = ref([
-  { id: 1, name: "Classe 1" },
-  { id: 2, name: "Classe 2" },
-  { id: 3, name: "Classe 3" },
+  { id: 1, nom: "Classe 1" },
+  { id: 2, nom: "Classe 2" },
+  { id: 3, nom: "Classe 3" },
 ]);
 
 const mockGroups = ref([
-  { id: 1, name: "Grup d’estudi 1" },
-  { id: 2, name: "Grup d’estudi 2" },
+  { id: 1, nom: "Grup d’estudi 1" },
+  { id: 2, nom: "Grup d’estudi 2" },
 ]);
 // Data real del backend
 const classes = ref([]);
 const groups = ref([]);
 const loading = ref(false);
 const error = ref("");
+
+onMounted(async () => {
+  loading.value = true;
+  error.value = "";
+  try {
+    const [cls, grps, users] = await Promise.all([
+      getClasses(),
+      getGroups(),
+      getUsers(),
+    ]);
+
+    classes.value = Array.isArray(cls) ? cls : [];
+    groups.value = Array.isArray(grps) ? grps : [];
+
+    // Current user + role for UI toggles
+    const me = getCurrentUser();
+    if (me) {
+      currentUser.value = me;
+      role.value = me.role || role.value;
+    }
+
+    // DM users list
+    const meId = currentUser.value?.id;
+    dmUsers.value = Array.isArray(users)
+      ? (meId ? users.filter((u) => String(u.id) !== String(meId)) : users)
+      : [];
+  } catch (e) {
+    console.error("Error loading initial data:", e);
+    // fall back to mock data so UI remains usable
+    classes.value = mockClasses.value;
+    groups.value = mockGroups.value;
+    error.value = e.message || "Error carregant dades";
+  } finally {
+    loading.value = false;
+  }
+});
 
 /**
  * DM Chats (usuaris + historial)
@@ -238,25 +290,28 @@ const selectedChatUser = computed(() => {
 function closeSidePanels() {
   leftMenuOpen.value = false;
   chatMenuOpen.value = false;
-  isProfileMenuOpen.value = false;
+  profileMenuOpen.value = false;
   selectedChatId.value = null;
   dmMessages.value = [];
 }
 
 function onClickHamburger() {
-  leftMenuOpen.value = !leftMenuOpen.value;
+  // Toggle the shared composable left drawer and close others
+  toggleLeft();
   chatMenuOpen.value = false;
-  isProfileMenuOpen.value = false;
+  profileMenuOpen.value = false;
 }
 
 function onClickChatIcon() {
-  chatMenuOpen.value = !chatMenuOpen.value;
+  // Toggle the shared chat drawer and close others
+  toggleChat();
   leftMenuOpen.value = false;
-  isProfileMenuOpen.value = false;
+  profileMenuOpen.value = false;
 }
 
 function onClickProfile() {
-  isProfileMenuOpen.value = !isProfileMenuOpen.value;
+  // Toggle shared profile dropdown
+  toggleProfile();
 }
 
 

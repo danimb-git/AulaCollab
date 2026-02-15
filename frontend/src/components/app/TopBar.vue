@@ -21,7 +21,7 @@
     </div>
 
     <!-- Dropdown del perfil (només es veu si el flag global o la prop està oberta) -->
-    <div v-if="(isProfileOpen || showProfileDropdown) || profileMenuOpen" class="profile-menu">
+    <div v-if="isProfileOpen || showProfileDropdown" class="profile-menu">
       <div class="profile-item">{{ displayName }}</div>
       <button @click="emitLogout">Tancar sessió</button>
     </div>
@@ -45,6 +45,9 @@ defineProps({
 
   // Nom (o email) a mostrar al botó de perfil
   profileName: { type: String, default: "" },
+ 
+  // Compat prop: alguns components anteriors passaven `showProfileDropdown`.
+  showProfileDropdown: { type: Boolean, default: false },
 });
 
 const emit = defineEmits([
@@ -56,7 +59,6 @@ const emit = defineEmits([
 
 import { getCurrentUser } from "../../services/api";
 import { computed } from "vue";
-import { toggleLeft, toggleChat, toggleProfile, profileMenuOpen } from "../../composables/useShell";
 
 const user = getCurrentUser();
 const displayName = computed(() => {
@@ -68,22 +70,15 @@ const displayName = computed(() => {
 });
 
 function emitToggleLeft() {
-  // Toggle global left drawer
-  toggleLeft();
   emit("toggle-left");
 }
-
 function emitToggleChat() {
-  // Toggle global chat drawer
-  toggleChat();
   emit("toggle-chat");
 }
 
 function emitToggleProfile() {
-  toggleProfile();
   emit("toggle-profile");
 }
-
 function emitLogout() {
   /**
    * 🔐 BACKEND:
